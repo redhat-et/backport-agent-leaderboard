@@ -146,18 +146,18 @@ The leaderboard reads all JSON files from a results directory and can be fully r
 
 ## Dataset
 
-The benchmark dataset contains 1,026 verified backports from open-source projects. Each entry is classified by complexity based on how much the backport diff diverges from the original fix:
+The benchmark dataset contains 1,032 verified backports from open-source projects. Each entry is classified by complexity based on how much the backport diff diverges from the original fix:
 
 | Complexity | Count | % | Description |
 |---|---|---|---|
-| **Easy** | 755 | 73.6% | Original fix and backport are essentially identical — same files, same changes |
-| **Medium** | 170 | 16.6% | Some adaptations needed — minor context differences, adjusted imports, or small code changes |
-| **Complex** | 101 | 9.8% | Significant divergence — different files changed, substantial rewrites due to API or feature differences between versions |
+| **Easy** | 758 | 73.4% | Original fix and backport are essentially identical — same files, same changes |
+| **Medium** | 170 | 16.5% | Some adaptations needed — minor context differences, adjusted imports, or small code changes |
+| **Complex** | 104 | 10.1% | Significant divergence — different files changed, substantial rewrites due to API or feature differences between versions |
 
 ```
-Easy    ████████████████████████████████████████████████████████░░░░░░░░░░░░░░░  73.6%
-Medium  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  16.6%
-Complex ███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   9.8%
+Easy    ████████████████████████████████████████████████████████░░░░░░░░░░░░░░░  73.4%
+Medium  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  16.5%
+Complex ███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  10.1%
 ```
 
 ### Counts by Repo and Classification
@@ -194,7 +194,7 @@ Complex ███████░░░░░░░░░░░░░░░░░
 | ckan/ckan | 0 | 1 | 0 | 1 |
 | cloudfoundry/uaa | 5 | 25 | 10 | 40 |
 | crate/crate | 4 | 105 | 22 | 131 |
-| cri-o/cri-o | 0 | 0 | 3 | 3 |
+| cri-o/cri-o | 3 | 3 | 3 | 9 |
 | django/django | 23 | 60 | 53 | 136 |
 | dropwizard/dropwizard | 0 | 0 | 1 | 1 |
 | eclipse-vertx/vert.x | 0 | 2 | 0 | 2 |
@@ -277,7 +277,7 @@ Complex ███████░░░░░░░░░░░░░░░░░
 | xmldom/xmldom | 0 | 2 | 0 | 2 |
 | xwiki/xwiki-commons | 0 | 2 | 0 | 2 |
 | xwiki/xwiki-platform | 1 | 15 | 0 | 16 |
-| **TOTAL** | **101** | **755** | **170** | **1026** |
+| **TOTAL** | **104** | **758** | **170** | **1032** |
 
 Classification is computed by fetching the patch for both the original and backport commits, normalizing them (stripping metadata, context lines, and line numbers), and comparing via sequence similarity and file overlap metrics.
 
