@@ -1,8 +1,0 @@
-pyproject.toml
-backport_bench/__init__.py
-backport_bench.egg-info/PKG-INFO
-backport_bench.egg-info/SOURCES.txt
-backport_bench.egg-info/dependency_links.txt
-backport_bench.egg-info/entry_points.txt
-backport_bench.egg-info/requires.txt
-backport_bench.egg-info/top_level.txt
