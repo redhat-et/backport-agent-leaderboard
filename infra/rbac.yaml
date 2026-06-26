@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eval-result-writer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-writer
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create", "update", "patch", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eval-result-writer-binding
+subjects:
+- kind: ServiceAccount
+  name: eval-result-writer
+roleRef:
+  kind: Role
+  name: configmap-writer
+  apiGroup: rbac.authorization.k8s.io

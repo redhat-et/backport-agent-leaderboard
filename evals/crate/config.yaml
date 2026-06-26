@@ -1,0 +1,65 @@
+# crate/crate evaluation config
+# Edit this file to change what runs — no Python code changes needed.
+
+repo: crate/crate
+
+# Optional: path to a local git clone used to read commit metadata (test class, module, branch).
+# Defaults to ../benchmark-repos/<repo-name> relative to the repo root.
+# local_clone: ~/code/crate
+
+# ── Dataset ────────────────────────────────────────────────────────────────
+dataset:
+  # Source: pull from the main backports.csv (131 verified crate/crate entries)
+  csv: ../../backports.csv
+
+  # Sampling — set both to null to run all 131 cases
+  limit: null           # null = all | integer = random sample (e.g. 23)
+  seed: 42              # reproducibility seed (only used when limit is set)
+
+  # Filter by complexity tier: null | "Easy" | "Medium" | "Hard"
+  classification: null
+
+  # Alternatively, list specific commits to evaluate (overrides csv/limit/classification)
+  # commits:
+  #   - orig: a2f572fc480380b3c2d17fd3b5e436e759723c19
+  #     backport: c0d5e58eb817a0ed54aab1d9e52c68ae4ac7f73e
+
+# ── Build & test commands ──────────────────────────────────────────────────
+# {module} is auto-detected from the files changed in each orig commit
+# {test_class} is the *Test.java file changed in each orig commit
+build_command: >
+  ./mvnw install -pl {module} -am -DskipTests
+  -DskipBlackboxTests=true -Dcheckstyle.skip=true -q
+
+test_command: >
+  ./mvnw test -pl {module} -Dtest={test_class}
+  -Dsurefire.failIfNoSpecifiedTests=true
+  -DskipBlackboxTests=true -Dcheckstyle.skip=true -q
+
+# ── Tools ──────────────────────────────────────────────────────────────────
+tools:
+  raw-claude:
+    enabled: true
+    display_name: "Raw Claude / Opus 4.6"
+    model: claude-opus-4-6
+    image: quay.io/supathak/crate-backport-test:latest
+
+  amalgamator:
+    enabled: true
+    display_name: "Amalgamator / Opus 4.6"
+    model: claude-opus-4-6
+    image: quay.io/supathak/crate-backport-test:latest
+
+# ── OpenShift execution ────────────────────────────────────────────────────
+openshift:
+  namespace: backport-agent-leaderboard
+  vertex_project: itpc-gcp-octo-eng-claude
+  vertex_region: global
+  job_timeout_seconds: 2400     # 40 min per pod max
+  resources:
+    raw-claude:
+      memory: "4Gi"
+      cpu: "2"
+    amalgamator:
+      memory: "8Gi"
+      cpu: "2"

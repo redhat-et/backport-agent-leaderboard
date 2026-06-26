@@ -216,3 +216,39 @@ This will:
 ## License
 
 See LICENSE file for details.
+
+---
+
+## OpenShift Containerized Evaluation
+
+In addition to the local CLI runner (`backport_bench/`), this repo includes a
+fully containerized evaluation harness that runs cases in parallel on OpenShift
+pods — enabling large-scale benchmarks without local setup per repo.
+
+```
+evals/                 ← One directory per evaluated repository
+│   └── crate/         ← Reference implementation for crate/crate (Java/Maven)
+│       ├── README.md      ← Full walkthrough: build image, configure, run, collect
+│       ├── config.yaml    ← All parameters (image, namespace, tools, limits)
+│       ├── Containerfile  ← Pod image definition
+│       └── scripts/
+│           └── generic_claude_backport.py   ← Raw Claude evaluator
+│
+infra/                 ← One-time OpenShift cluster setup
+│   ├── README.md      ← Login, RBAC, secrets, ConfigMaps (why + how)
+│   └── rbac.yaml
+│
+run.py                 ← Generic runner: python3 run.py --config evals/<repo>/config.yaml
+```
+
+**Quick start:**
+```bash
+# Launch all tools for crate/crate
+python3 run.py --config evals/crate/config.yaml
+
+# Collect results from OpenShift ConfigMaps → JSON
+python3 run.py --config evals/crate/config.yaml --collect
+```
+
+See [`evals/crate/README.md`](evals/crate/README.md) for the full step-by-step guide,
+and [`infra/README.md`](infra/README.md) for one-time cluster setup.
