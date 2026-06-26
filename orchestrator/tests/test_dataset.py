@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from backport_bench.dataset import BackportEntry, load_dataset, parse_reason, filter_dataset, classify_backport, compute_metrics
+from backport_bench.dataset import BackportEntry, load_dataset, parse_reason, filter_dataset, classify_backport, compute_metrics, parse_repos_md, RepoMetadata
 
 
 class TestParseReason:
@@ -191,3 +191,27 @@ class TestComputeMetrics:
         metrics = compute_metrics(diff, diff)
         assert metrics["orig_files"] == 2
         assert metrics["back_files"] == 2
+
+
+class TestParseReposMd:
+    def test_parses_known_repo(self, sample_repos_md):
+        repos = parse_repos_md(sample_repos_md)
+        assert "owner/repo-a" in repos
+        meta = repos["owner/repo-a"]
+        assert meta.build == "pip install ."
+        assert meta.test == "pytest"
+        assert "PEP 8" in meta.guidelines
+
+    def test_unknown_repo_not_in_result(self, sample_repos_md):
+        repos = parse_repos_md(sample_repos_md)
+        assert "unknown/repo" not in repos
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        repos = parse_repos_md(tmp_path / "nonexistent.md")
+        assert repos == {}
+
+    def test_strips_backticks_from_commands(self, sample_repos_md):
+        repos = parse_repos_md(sample_repos_md)
+        meta = repos["owner/repo-a"]
+        assert "`" not in meta.build
+        assert "`" not in meta.test

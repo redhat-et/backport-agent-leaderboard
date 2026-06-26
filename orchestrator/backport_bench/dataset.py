@@ -30,6 +30,13 @@ def parse_reason(reason: str) -> dict:
 
 
 @dataclass
+class RepoMetadata:
+    build: str
+    test: str
+    guidelines: str
+
+
+@dataclass
 class BackportEntry:
     repo: str
     original_commit: str
@@ -159,3 +166,33 @@ def compute_metrics(original_diff: str, backport_diff: str) -> dict:
         "orig_files": len(orig_files),
         "back_files": len(back_files),
     }
+
+
+def parse_repos_md(path: Path) -> dict[str, RepoMetadata]:
+    path = Path(path)
+    if not path.exists():
+        return {}
+
+    text = path.read_text()
+    result = {}
+    in_table = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            in_table = False
+            continue
+        cells = [c.strip() for c in stripped.split("|")[1:-1]]
+        if len(cells) < 6:
+            continue
+        if cells[0] in ("Repo", "---", "") or all(c.startswith("-") for c in cells):
+            in_table = True
+            continue
+        if in_table:
+            repo = cells[0].strip()
+            build = cells[3].strip().strip("`")
+            test = cells[4].strip().strip("`")
+            guidelines = cells[5].strip()
+            result[repo] = RepoMetadata(build=build, test=test, guidelines=guidelines)
+
+    return result
