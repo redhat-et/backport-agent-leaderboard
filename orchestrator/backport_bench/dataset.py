@@ -74,3 +74,26 @@ def load_dataset(path: Path) -> list[BackportEntry]:
         for row in reader:
             entries.append(BackportEntry.from_csv_row(row))
     return entries
+
+
+def filter_dataset(
+    entries: list[BackportEntry],
+    *,
+    repo: str | None = None,
+    classification: str | None = None,
+    original: str | None = None,
+    backport: str | None = None,
+    limit: int | None = None,
+) -> list[BackportEntry]:
+    filtered = list(entries)
+    if repo is not None:
+        filtered = [e for e in filtered if e.repo == repo]
+    if classification is not None:
+        filtered = [e for e in filtered if e.classification == classification]
+    if original is not None:
+        filtered = [e for e in filtered if e.original_commit == original]
+    if backport is not None:
+        filtered = [e for e in filtered if e.backport_commit == backport]
+    if limit is not None:
+        filtered = filtered[:limit]
+    return filtered

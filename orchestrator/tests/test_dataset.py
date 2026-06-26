@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from backport_bench.dataset import BackportEntry, load_dataset, parse_reason
+from backport_bench.dataset import BackportEntry, load_dataset, parse_reason, filter_dataset
 
 
 class TestParseReason:
@@ -91,3 +91,53 @@ class TestLoadDataset:
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             load_dataset(tmp_path / "missing.csv")
+
+
+class TestFilterDataset:
+    def test_filter_by_repo(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, repo="owner/repo-a")
+        assert len(filtered) == 2
+        assert all(e.repo == "owner/repo-a" for e in filtered)
+
+    def test_filter_by_classification(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, classification="Hard")
+        assert len(filtered) == 1
+        assert filtered[0].classification == "Hard"
+
+    def test_filter_by_original_sha(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, original="aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111")
+        assert len(filtered) == 1
+
+    def test_filter_by_backport_sha(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, backport="dddd4444dddd4444dddd4444dddd4444dddd4444")
+        assert len(filtered) == 1
+
+    def test_filter_combined_original_and_backport(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, original="aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111", backport="bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222")
+        assert len(filtered) == 1
+
+    def test_filter_with_limit(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, limit=1)
+        assert len(filtered) == 1
+
+    def test_no_filters_returns_all(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries)
+        assert len(filtered) == 3
+
+    def test_filter_no_match(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, repo="nonexistent/repo")
+        assert len(filtered) == 0
+
+    def test_filter_order_preserved(self, sample_csv_path):
+        entries = load_dataset(sample_csv_path)
+        filtered = filter_dataset(entries, repo="owner/repo-a", limit=1)
+        assert len(filtered) == 1
+        assert filtered[0].classification == "Easy"
