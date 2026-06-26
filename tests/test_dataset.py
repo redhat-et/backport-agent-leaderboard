@@ -253,3 +253,62 @@ class TestAppendBackport:
         assert len(reloaded) == len(original) + 1
         for i, orig in enumerate(original):
             assert reloaded[i].repo == orig.repo
+
+
+class TestDetectRepoMetadata:
+    def test_detects_python_with_pyproject(self, tmp_path):
+        from backport_bench.dataset import detect_repo_metadata
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("print('hello')")
+        (tmp_path / "src" / "utils.py").write_text("x = 1")
+        meta = detect_repo_metadata(tmp_path)
+        assert "Python" in meta.build or meta.build == "pip install ."
+        assert meta.test == "pytest"
+
+    def test_detects_go_mod(self, tmp_path):
+        from backport_bench.dataset import detect_repo_metadata
+        (tmp_path / "main.go").write_text("package main")
+        (tmp_path / "go.mod").write_text("module example.com/test")
+        meta = detect_repo_metadata(tmp_path)
+        assert meta.build == "go build ./..."
+        assert meta.test == "go test ./..."
+
+    def test_detects_contributing_md(self, tmp_path):
+        from backport_bench.dataset import detect_repo_metadata
+        (tmp_path / "CONTRIBUTING.md").write_text("# Contributing\n")
+        (tmp_path / ".editorconfig").write_text("root = true\n")
+        meta = detect_repo_metadata(tmp_path)
+        assert "CONTRIBUTING.md" in meta.guidelines
+        assert ".editorconfig" in meta.guidelines
+
+    def test_empty_repo(self, tmp_path):
+        from backport_bench.dataset import detect_repo_metadata
+        meta = detect_repo_metadata(tmp_path)
+        assert meta.build == ""
+        assert meta.test == ""
+        assert meta.guidelines == ""
+
+
+class TestAppendRepoMetadata:
+    def test_appends_row(self, tmp_path):
+        from backport_bench.dataset import append_repo_metadata
+        repos_md = tmp_path / "repos.md"
+        repos_md.write_text("| Repo | Technology | Prerequisites | Build | Test | Guidelines |\n|---|---|---|---|---|---|\n")
+        meta = RepoMetadata(build="make", test="make test", guidelines="CONTRIBUTING.md")
+        append_repo_metadata("new/repo", meta, repos_md)
+        content = repos_md.read_text()
+        assert "new/repo" in content
+        assert "`make`" in content
+        assert "`make test`" in content
+
+    def test_parseable_after_append(self, tmp_path):
+        from backport_bench.dataset import append_repo_metadata
+        repos_md = tmp_path / "repos.md"
+        repos_md.write_text("| Repo | Technology | Prerequisites | Build | Test | Guidelines |\n|---|---|---|---|---|---|\n")
+        meta = RepoMetadata(build="pip install .", test="pytest", guidelines="CONTRIBUTING.md")
+        append_repo_metadata("new/repo", meta, repos_md)
+        parsed = parse_repos_md(repos_md)
+        assert "new/repo" in parsed
+        assert parsed["new/repo"].build == "pip install ."
+        assert parsed["new/repo"].test == "pytest"

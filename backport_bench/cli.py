@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import click
@@ -20,17 +21,33 @@ from backport_bench.runner import execute_run
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 @click.group()
 @click.option("--config", "-c", default="config.yaml", help="Path to YAML config file.")
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging.")
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx, config, verbose):
     """backport-bench: Benchmark orchestrator for automated backporting tools."""
+    root = _project_root()
+    log_dir = root / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "backport-bench.log"
+
+    handlers = [logging.FileHandler(log_file)]
+    if verbose:
+        handlers.append(logging.StreamHandler())
+
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+    )
+
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = Path(config)
-    ctx.obj["root"] = _project_root()
+    ctx.obj["root"] = root
 
 
 @cli.command()
@@ -40,8 +57,9 @@ def cli(ctx, config):
 @click.option("--original", help="Filter by original commit SHA.")
 @click.option("--backport", help="Filter by backport commit SHA.")
 @click.option("--limit", type=int, help="Max entries to run.")
+@click.option("--force", is_flag=True, help="Re-run even if results already exist.")
 @click.pass_context
-def run(ctx, tool, repo, classification, original, backport, limit):
+def run(ctx, tool, repo, classification, original, backport, limit, force):
     """Run benchmark against the dataset."""
     config = load_config(ctx.obj["config_path"])
     root = ctx.obj["root"]
@@ -73,9 +91,9 @@ def run(ctx, tool, repo, classification, original, backport, limit):
     passed = failed = errors = skipped = 0
 
     for i, entry in enumerate(entries, 1):
-        if has_result(tool_key, entry.repo, entry.original_commit, entry.backport_commit, results_dir):
+        if not force and has_result(tool_key, entry.repo, entry.original_commit, entry.backport_commit, results_dir):
             skipped += 1
-            click.echo(f"[{i}/{total}] {entry.repo} {entry.original_commit[:8]} → {entry.backport_commit[:8]}  SKIPPED (exists)")
+            click.echo(f"[{i}/{total}] {entry.repo} {entry.original_commit[:8]} → {entry.backport_commit[:8]}  SKIPPED (exists, use --force to re-run)")
             continue
 
         result = execute_run(
@@ -209,3 +227,15 @@ def add_backport(ctx, repo, original, backport, add_repo):
     )
     append_backport(entry, root / "backports.csv")
     click.echo(f"Appended to backports.csv")
+
+    if add_repo:
+        repos_metadata = parse_repos_md(root / "repos.md")
+        if repo not in repos_metadata:
+            from backport_bench.dataset import detect_repo_metadata, append_repo_metadata
+            detected = detect_repo_metadata(project_path)
+            click.echo(f"Detected metadata for {repo}:")
+            click.echo(f"  Build: {detected.build or '(none)'}")
+            click.echo(f"  Test: {detected.test or '(none)'}")
+            click.echo(f"  Guidelines: {detected.guidelines or '(none)'}")
+            append_repo_metadata(repo, detected, root / "repos.md")
+            click.echo(f"Appended to repos.md")

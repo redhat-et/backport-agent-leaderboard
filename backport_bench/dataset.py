@@ -198,6 +198,90 @@ def parse_repos_md(path: Path) -> dict[str, RepoMetadata]:
     return result
 
 
+def _count_extensions(project_path: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for p in project_path.rglob("*"):
+        if p.is_file() and not any(part.startswith(".") for part in p.relative_to(project_path).parts):
+            ext = p.suffix.lower()
+            if ext:
+                counts[ext] = counts.get(ext, 0) + 1
+    return counts
+
+
+_EXT_TO_LANG = {
+    ".py": "Python", ".java": "Java", ".go": "Go", ".js": "JavaScript",
+    ".ts": "TypeScript", ".cpp": "C++", ".c": "C", ".rs": "Rust",
+    ".rb": "Ruby", ".swift": "Swift", ".kt": "Kotlin", ".scala": "Scala",
+    ".cs": "C#", ".php": "PHP", ".sh": "Shell",
+}
+
+_BUILD_DETECTORS = [
+    ("mvnw", "./mvnw compile"),
+    ("gradlew", "./gradlew build"),
+    ("Makefile", "make"),
+    ("Cargo.toml", "cargo build"),
+    ("BUILD", "bazel build //..."),
+    ("pyproject.toml", "pip install ."),
+    ("setup.py", "python setup.py build"),
+    ("package.json", "npm run build"),
+    ("go.mod", "go build ./..."),
+]
+
+_TEST_DETECTORS = [
+    ("mvnw", "./mvnw test"),
+    ("gradlew", "./gradlew test"),
+    ("Cargo.toml", "cargo test"),
+    ("go.mod", "go test ./..."),
+    ("pyproject.toml", "pytest"),
+    ("setup.py", "pytest"),
+    ("package.json", "npm test"),
+    ("Makefile", "make test"),
+    ("BUILD", "bazel test //..."),
+]
+
+
+def detect_repo_metadata(project_path: Path) -> RepoMetadata:
+    project_path = Path(project_path)
+
+    ext_counts = _count_extensions(project_path)
+    total = sum(ext_counts.values()) or 1
+    top_langs = sorted(
+        ((ext, count) for ext, count in ext_counts.items() if ext in _EXT_TO_LANG),
+        key=lambda x: x[1],
+        reverse=True,
+    )[:3]
+    technology = ", ".join(
+        f"{_EXT_TO_LANG[ext]} ({count * 100 // total}%)" for ext, count in top_langs
+    ) if top_langs else ""
+
+    build = ""
+    for marker, cmd in _BUILD_DETECTORS:
+        if (project_path / marker).exists():
+            build = cmd
+            break
+
+    test = ""
+    for marker, cmd in _TEST_DETECTORS:
+        if (project_path / marker).exists():
+            test = cmd
+            break
+
+    guideline_files = ["CONTRIBUTING.md", "CONTRIBUTING.rst", ".editorconfig"]
+    found = [f for f in guideline_files if (project_path / f).exists()]
+    guidelines = ", ".join(found)
+
+    return RepoMetadata(build=build, test=test, guidelines=guidelines)
+
+
+def append_repo_metadata(repo: str, metadata: RepoMetadata, repos_md_path: Path) -> None:
+    repos_md_path = Path(repos_md_path)
+    build = f"`{metadata.build}`" if metadata.build else ""
+    test = f"`{metadata.test}`" if metadata.test else ""
+    row = f"| {repo} | | | {build} | {test} | {metadata.guidelines} |\n"
+    with open(repos_md_path, "a") as f:
+        f.write(row)
+
+
 def validate_commit_reachable(project_path: Path, sha: str) -> bool:
     import subprocess
     result = subprocess.run(

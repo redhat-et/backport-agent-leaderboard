@@ -4,31 +4,28 @@ A benchmarking platform that evaluates automated backporting tools against a cur
 
 ## Overview
 
-Backport Agent Leaderboard consists of two Python packages:
+Backport Agent Leaderboard consists of two components:
 
-- **orchestrator/** — CLI tool that runs benchmarks, evaluates semantic equivalence, and stores results
+- **backport_bench/** — CLI tool that runs benchmarks, evaluates semantic equivalence, and stores results
 - **leaderboard/** — Standalone Gradio web app that visualizes benchmark results
 
-The system uses a curated dataset of 1,032 verified backports from 91 open-source projects, classified by complexity (Easy, Medium, Complex).
+The system uses a curated dataset of 36 verified backports from 4 open-source projects, classified by complexity (Easy, Medium, Hard).
 
 ## Prerequisites
 
 - Python 3.12 or later
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Git
 - Access to Claude API (for semantic diff evaluation and guideline checking)
 
 ## Installation
 
-Install both packages in development mode:
-
 ```bash
-# Install orchestrator
-cd orchestrator
-pip install -e ".[dev]"
+# Install core orchestrator + dev tools
+uv sync --extra dev
 
-# Install leaderboard
-cd ../leaderboard
-pip install -e ".[dev]"
+# Also install the leaderboard app
+uv sync --extra dev --extra leaderboard
 ```
 
 ## Quick Start
@@ -61,6 +58,9 @@ backport-bench run --tool my-tool --classification Easy
 
 # Run a specific backport entry by commit SHAs
 backport-bench run --tool my-tool --original <orig_sha> --backport <backport_sha>
+
+# Re-run entries that already have results
+backport-bench run --tool my-tool --force
 ```
 
 ### 3. View results
@@ -99,59 +99,60 @@ This automatically:
 - [PRD.md](PRD.md) — Product requirements and functional specifications
 - [Design Spec](docs/superpowers/specs/2026-06-26-backport-bench-design.md) — Technical design and architecture
 - [config.example.yaml](config.example.yaml) — Configuration file reference
-- [orchestrator/README.md](orchestrator/README.md) — Orchestrator package documentation
 - [leaderboard/README.md](leaderboard/README.md) — Leaderboard app documentation
 
 ## Project Structure
 
 ```
 backport-agent-leaderboard/
+├── pyproject.toml               # Single project configuration
 ├── config.example.yaml          # Configuration template
 ├── backports.csv                # Dataset of known-good backports
 ├── repos.md                     # Repository metadata (build/test/guidelines)
 │
-├── orchestrator/                # CLI + benchmark engine
-│   ├── backport_bench/         # Core package
-│   │   ├── cli.py              # Click CLI entry point
-│   │   ├── config.py           # YAML parsing + Pydantic models
-│   │   ├── dataset.py          # CSV loading, filtering
-│   │   ├── runner.py           # Single-run orchestration pipeline
-│   │   ├── git_ops.py          # Git operations (clone, branch, diff)
-│   │   ├── evaluator.py        # Semantic diff + guideline checking
-│   │   ├── results.py          # Result storage
-│   │   └── variables.py        # Environment variable building
-│   └── tests/                  # Test suite
+├── backport_bench/              # Core package (CLI + benchmark engine)
+│   ├── cli.py                   # Click CLI entry point
+│   ├── config.py                # YAML parsing + Pydantic models
+│   ├── dataset.py               # CSV loading, filtering
+│   ├── runner.py                # Single-run orchestration pipeline
+│   ├── git_ops.py               # Git operations (clone, branch, diff)
+│   ├── evaluator.py             # Semantic diff + guideline checking
+│   ├── results.py               # Result storage
+│   └── variables.py             # Environment variable building
 │
-├── leaderboard/                # Standalone Gradio app
-│   ├── app.py                  # Gradio app entry point
-│   ├── data_loader.py          # Result JSON file reading
-│   └── about.md                # About tab content
+├── tests/                       # Orchestrator test suite
 │
-├── results/                    # Per-run result JSON files
-│   └── aggregated/             # Aggregated files for leaderboard
+├── leaderboard/                 # Standalone Gradio app
+│   ├── app.py                   # Gradio app entry point
+│   ├── data_loader.py           # Result JSON file reading
+│   ├── about.md                 # About tab content
+│   └── tests/                   # Leaderboard test suite
 │
-├── diffs/                      # Retained diffs for debugging
-└── projects/                   # Cached repository clones
+├── results/                     # Per-run result JSON files
+│   └── aggregated/              # Aggregated files for leaderboard
+│
+├── diffs/                       # Retained diffs for debugging
+└── projects/                    # Cached repository clones
 ```
 
 ## How It Works
 
 ### 1. Dataset
 
-A curated set of 1,032 known-good backports from 91 open-source projects serves as ground truth. Each entry contains:
+A curated set of 36 known-good backports from 4 open-source projects serves as ground truth. Each entry contains:
 
 - Repository identifier
 - Original commit SHA (the fix on the source branch)
 - Backport commit SHA (the known-good backport on the target branch)
-- Classification (Easy, Medium, Complex) based on complexity metrics
+- Classification (Easy, Medium, Hard) based on complexity metrics
 
 Classification is computed automatically by comparing normalized diffs:
 
 | Complexity | Count | % | Description |
 |---|---|---|---|
-| **Easy** | 758 | 73.4% | Original and backport are nearly identical |
-| **Medium** | 170 | 16.5% | Some adaptations needed (context differences, imports) |
-| **Complex** | 104 | 10.1% | Significant divergence (different files, API changes) |
+| **Easy** | 12 | 33.3% | Original and backport are nearly identical |
+| **Medium** | 12 | 33.3% | Some adaptations needed (context differences, imports) |
+| **Hard** | 12 | 33.3% | Significant divergence (different files, API changes) |
 
 ### 2. Run Pipeline
 
