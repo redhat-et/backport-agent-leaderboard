@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from backport_bench.dataset import BackportEntry, load_dataset, parse_reason, filter_dataset, classify_backport, compute_metrics, parse_repos_md, RepoMetadata
+from backport_bench.dataset import BackportEntry, load_dataset, parse_reason, filter_dataset, classify_backport, compute_metrics, parse_repos_md, RepoMetadata, append_backport, validate_commit_reachable
 
 
 class TestParseReason:
@@ -215,3 +215,41 @@ class TestParseReposMd:
         meta = repos["owner/repo-a"]
         assert "`" not in meta.build
         assert "`" not in meta.test
+
+
+class TestAppendBackport:
+    def test_appends_to_csv(self, sample_csv_path):
+        entry = BackportEntry(
+            repo="new/repo",
+            original_commit="x" * 40,
+            backport_commit="y" * 40,
+            classification="Easy",
+            similarity=0.95,
+            file_overlap=0.90,
+            size_ratio=0.98,
+            orig_files=2,
+            back_files=2,
+        )
+        append_backport(entry, sample_csv_path)
+        reloaded = load_dataset(sample_csv_path)
+        assert len(reloaded) == 4
+        assert reloaded[-1].repo == "new/repo"
+
+    def test_preserves_existing_entries(self, sample_csv_path):
+        original = load_dataset(sample_csv_path)
+        entry = BackportEntry(
+            repo="new/repo",
+            original_commit="x" * 40,
+            backport_commit="y" * 40,
+            classification="Hard",
+            similarity=0.20,
+            file_overlap=0.30,
+            size_ratio=0.40,
+            orig_files=1,
+            back_files=1,
+        )
+        append_backport(entry, sample_csv_path)
+        reloaded = load_dataset(sample_csv_path)
+        assert len(reloaded) == len(original) + 1
+        for i, orig in enumerate(original):
+            assert reloaded[i].repo == orig.repo

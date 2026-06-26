@@ -196,3 +196,29 @@ def parse_repos_md(path: Path) -> dict[str, RepoMetadata]:
             result[repo] = RepoMetadata(build=build, test=test, guidelines=guidelines)
 
     return result
+
+
+def validate_commit_reachable(project_path: Path, sha: str) -> bool:
+    import subprocess
+    result = subprocess.run(
+        ["git", "branch", "-r", "--contains", sha],
+        cwd=project_path, capture_output=True, text=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() != ""
+
+
+def append_backport(entry: BackportEntry, csv_path: Path) -> None:
+    csv_path = Path(csv_path)
+    row = {
+        "repo": entry.repo,
+        "Original Commit": entry.original_commit,
+        "Backport Commit": entry.backport_commit,
+        "Classification": entry.classification,
+        "Reason": entry.to_reason_string(),
+    }
+    with open(csv_path, "a", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["repo", "Original Commit", "Backport Commit", "Classification", "Reason"],
+        )
+        writer.writerow(row)

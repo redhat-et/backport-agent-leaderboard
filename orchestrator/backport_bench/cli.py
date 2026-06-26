@@ -164,5 +164,48 @@ def leaderboard(ctx):
 @click.pass_context
 def add_backport(ctx, repo, original, backport, add_repo):
     """Add a new backport entry to the dataset."""
-    click.echo(f"Adding backport: {repo} {original[:8]} → {backport[:8]}")
-    click.echo("(add-backport implementation requires git repo access — see Task 13)")
+    from backport_bench.git_ops import clone_or_fetch, extract_diff
+    from backport_bench.dataset import (
+        append_backport,
+        classify_backport,
+        compute_metrics,
+        validate_commit_reachable,
+    )
+
+    root = ctx.obj["root"]
+    projects_dir = root / "projects"
+    projects_dir.mkdir(exist_ok=True)
+
+    owner, name = repo.split("/", 1)
+    dir_name = f"{owner}__{name}"
+    repo_url = f"https://github.com/{repo}.git"
+
+    click.echo(f"Cloning/fetching {repo}...")
+    project_path = clone_or_fetch(repo_url, projects_dir, dir_name)
+
+    if not validate_commit_reachable(project_path, original):
+        raise click.ClickException(f"Original commit {original} is not reachable from any remote branch.")
+
+    click.echo("Extracting diffs...")
+    orig_diff = extract_diff(project_path, original)
+    back_diff = extract_diff(project_path, backport)
+
+    metrics = compute_metrics(orig_diff, back_diff)
+    classification = classify_backport(
+        similarity=metrics["similarity"],
+        file_overlap=metrics["file_overlap"],
+    )
+
+    click.echo(f"Classification: {classification}")
+    click.echo(f"  similarity={metrics['similarity']:.2f}, file_overlap={metrics['file_overlap']:.2f}, "
+               f"size_ratio={metrics['size_ratio']:.2f}, orig_files={metrics['orig_files']}, back_files={metrics['back_files']}")
+
+    entry = BackportEntry(
+        repo=repo,
+        original_commit=original,
+        backport_commit=backport,
+        classification=classification,
+        **metrics,
+    )
+    append_backport(entry, root / "backports.csv")
+    click.echo(f"Appended to backports.csv")
