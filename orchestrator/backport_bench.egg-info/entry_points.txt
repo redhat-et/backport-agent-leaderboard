@@ -1,0 +1,2 @@
+[console_scripts]
+backport-bench = backport_bench.cli:cli
