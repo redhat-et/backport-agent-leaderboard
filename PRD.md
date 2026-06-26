@@ -26,8 +26,31 @@ A curated set of known-good backports sourced from open-source repositories. Eac
 | `repo` | The source repository (e.g., `line/armeria`) |
 | `original_commit` | The SHA of the original fix on the source branch |
 | `backport_commit` | The SHA of the known-good backport on the target branch |
+| `classification` | Complexity label (`Easy`, `Medium`, or `Hard`) based on how much the backport diff diverges from the original fix |
+| `reason` | Semicolon-separated comparison metrics used to assign the classification (see below) |
 
-The dataset spans multiple languages, project sizes, and diff complexities. It serves as ground truth: the backport commit's diff is the correct answer.
+The `reason` field records how the original and backport patches compare after normalization (metadata, context lines, and line numbers stripped). Metrics:
+
+| Metric | Description |
+|---|---|
+| `similarity` | Sequence similarity ratio (0.00–1.00) between the normalized text of the original and backport patches. Higher values mean the changed content is nearly identical; lower values indicate substantial textual divergence. |
+| `file_overlap` | File-set overlap ratio (0.00–1.00) between the two patches. Measures how many of the changed files appear in both diffs versus files changed in only one. Higher values mean the backport modified the same files as the original; lower values mean it touched a different set of files. |
+| `size_ratio` | Relative size of the normalized patches (0.00–1.00), computed as the ratio of the smaller patch to the larger patch by changed-line count. Values near 1.00 mean similar scope; lower values mean one patch is substantially smaller than the other. |
+| `orig_files` | Number of files modified in the original commit's patch. |
+| `back_files` | Number of files modified in the backport commit's patch. |
+
+The dataset spans multiple languages, project sizes, and diff complexities. Classification is computed by comparing normalized patches from the original and backport commits via sequence similarity and file-overlap metrics. It serves as ground truth: the backport commit's diff is the correct answer.
+
+Each repository in the dataset is described in [`repos.md`](repos.md), which documents the toolchain, build/test commands, and contributing conventions needed to work with that project. Columns:
+
+| Column | Description |
+|---|---|
+| `Repo` | Repository identifier (`owner/name`, matching the `repo` field in the dataset) |
+| `Technology` | Primary languages and a brief summary of what the project does |
+| `Prerequisites` | Required toolchain versions, system packages, and external services needed to build and test |
+| `Build` | Command(s) to compile or build the project |
+| `Test` | Command(s) to run the project's test suite |
+| `Guidelines` | Contributing conventions, style guides, linting rules, and review requirements |
 
 ### Tool
 
@@ -41,9 +64,10 @@ Each tool definition includes a `display_name` that serves as its identity on th
 
 - `Amalgamator - Opus 4.6`
 - `Amalgamator - Sonnet 4.6`
-- `Claude Code - Opus 4.6 - superpowers`
+- `Claude Code - Opus 4.6`
+- `Claude Code - Opus 4.6 w/ superpowers`
 
-The `display_name` is the sole identifier for a leaderboard entry — there is no separate (tool, configuration) tuple. Two entries with the same `display_name` are the same entry; two entries with different `display_name` values are distinct, even if they use the same underlying tool.
+The `display_name` is the sole identifier for a leaderboard entry. Two entries with the same `display_name` are the same entry; two entries with different `display_name` values are distinct, even if they use the same underlying tool.
 
 ### Run
 
@@ -51,7 +75,11 @@ A single execution of a tool configuration against one backport entry. A run pro
 
 | Output | Description |
 |---|---|
-| `result` | `PASS` if the generated diff is semantically equivalent to the known-good backport; `FAIL` otherwise |
+| `semantic_equivalence` | `PASS` if the generated diff is semantically equivalent to the known-good backport; `FAIL` otherwise |
+| `semantic_difference_reason` | When `semantic_equivalence = FAIL`, a brief explanation of why the generated diff is not semantically equivalent to the known-good backport; `null` otherwise |
+| `guideline_adherence` | `PASS` if the generated diff adheres to the repository's contributing guidelines (see [`repos.md`](repos.md)); `FAIL` otherwise |
+| `guideline_reason` | When `guideline_adherence = FAIL`, a brief explanation of which guideline(s) the generated diff violates; `null` otherwise |
+| `test_success` | `PASS` if applying the generated diff introduces no new test failures; `FAIL` if it does; `SKIPPED` if `verify_tests` is `false` in the configuration |
 | `error` | Error message if the run could not complete (setup failure, tool crash, timeout) |
 | `diff_lines` | Number of lines differing between the generated and expected diffs (0 = exact match) |
 | `time` | Wall-clock time in seconds |
@@ -63,7 +91,7 @@ A single execution of a tool configuration against one backport entry. A run pro
 
 ### Leaderboard
 
-An aggregated view that ranks entries by their performance across the full dataset (or a filtered subset). Primary ranking metric is **pass rate** (% of backports where `result = PASS`). Secondary metrics include median cost, median time, and median token usage.
+An aggregated view that ranks entries by their performance across the full dataset (or a filtered subset). Primary ranking metric is **pass rate** (% of backports where `semantic_equivalence = PASS`). Secondary metrics include guideline_adherence rate, test_success_rate, median cost, median time, and median token usage.
 
 ## Functional Requirements
 
@@ -114,9 +142,12 @@ The orchestrator sets the following environment variables before invoking each c
 | `${BACKPORT_SHA}` | SHA of the known-good backport commit |
 | `${RUN_KEY}` | Unique key for this run (`{orig_sha}-{backport_sha}`) |
 | `${PROJECT_PATH}` | Absolute path to the local project clone |
+| `${BUILD_CMD}` | Command to build the repo |
+| `${TEST_COMMAND}` | Command to test the repo |
+| `${REPO_GUIDELINES}` | Contributing conventions, style guides, linting rules, and review requirements for the repo |
 | `${SOURCE_BRANCH}` | Branch containing the original commit |
 | `${TARGET_WORKSPACE}` | Path to the isolated worktree for the branch that will contain the generated backport |
-| `${ORIGINAL_DIFF_PATH}` | Path to the known-good backport diff |
+| `${ORIGINAL_DIFF_PATH}` | Path where the orchestrator writes the known-good backport diff (extracted from `${BACKPORT_SHA}`) |
 | `${PIPELINE_DIFF_PATH}` | Path to the tool-generated diff (also where `generate_diff` must write its output) |
 
 #### Exit Codes
@@ -125,7 +156,7 @@ All commands use exit code 0 for success. A non-zero exit code is treated as an 
 
 ### FR-2: Configuration File
 
-The system is driven by a single YAML configuration file. This file defines global settings (semantic diff model, default tool) and one or more tool definitions. Each tool definition specifies the shell commands that satisfy the command contract (FR-1), a display name for the leaderboard, and any tool-specific parameters.
+The system is driven by a single YAML configuration file. This file defines global settings (semantic diff model, guideline check model, test verification, default tool) and one or more tool definitions. Each tool definition specifies the shell commands that satisfy the command contract (FR-1), a display name for the leaderboard, and any tool-specific parameters.
 
 **Configuration file (YAML):**
 
@@ -136,11 +167,22 @@ The system is driven by a single YAML configuration file. This file defines glob
 semantic_diff:
   model: "claude-opus-4-6"              # LLM used to judge semantic equivalence
   command: |                             # command to run for the equivalence check
-    claude -m ${SEMANTIC_DIFF_MODEL} -p "Compare @${ORIGINAL_DIFF_PATH} and @${PIPELINE_DIFF_PATH} and determine if they are semantically equivalent. 
-    Respond with either YES or NO.  Do not include any other text in your response." 
+    claude -m ${SEMANTIC_DIFF_MODEL} -p "Compare @${ORIGINAL_DIFF_PATH} and @${PIPELINE_DIFF_PATH} and determine if they are semantically equivalent.
+    Respond with a single JSON object and no other text:
+    - If equivalent: {\"equivalent\": true}
+    - If not equivalent: {\"equivalent\": false, \"reason\": \"<brief explanation of the semantic difference>\"}"
+
+guideline_check:
+  model: "claude-opus-4-6"              # LLM used to judge guideline adherence
+  command: |                             # command to run for the guideline check
+    claude -m ${GUIDELINE_CHECK_MODEL} -p "Review @${PIPELINE_DIFF_PATH} against the following contributing guidelines: ${REPO_GUIDELINES}
+    Respond with a single JSON object and no other text:
+    - If adheres: {\"adheres\": true}
+    - If not adheres: {\"adheres\": false, \"reason\": \"<brief explanation of the guideline violation>\"}"
 
 default_tool: "amalgamator-opus"         # tool to use when --tool is not passed on CLI
 timeout: 1800                            # max seconds a tool may run before the run is killed and recorded as an error
+verify_tests: false                      # if true, run tests before/after diff and set test_success; if false, test_success is SKIPPED
 
 # ---------------------------------------------------------------------------
 # Tool definitions
@@ -168,14 +210,17 @@ tools:
         fix:
           commit: "${ORIG_SHA}"
         build:
-          command: ""
-          test_command: ""
+          command: "${BUILD_CMD}"
+          test_command: "${TEST_COMMAND}"
         model: "${CONFIG_MODEL}"
         EOF
       generate_diff: |
         cd ${CONFIG_TOOL_LOCATION} &&
         source .venv/bin/activate &&
-        python -m auto_bug_fix.run_bug_fix ${CONFIG_CONFIG_FILE}
+        python -m auto_bug_fix.run_bug_fix ${CONFIG_CONFIG_FILE} &&
+        RUN_DIR=$(ls -d ${CONFIG_TOOL_LOCATION}/runs/${RUN_KEY}* | sort | tail -1) &&
+        cp ${ORIGINAL_DIFF_PATH} "$RUN_DIR/original.diff" &&
+        cp ${PIPELINE_DIFF_PATH} "$RUN_DIR/pipeline.diff"
       get_stats: |
         LOG=$(ls -d ${CONFIG_TOOL_LOCATION}/runs/${RUN_KEY}* | sort | tail -1)/run_log.txt
         echo $(grep -E '^TOTAL' "$LOG" | awk '{
@@ -205,14 +250,17 @@ tools:
         fix:
           commit: "${ORIG_SHA}"
         build:
-          command: ""
-          test_command: ""
+          command: "${BUILD_CMD}"
+          test_command: "${TEST_COMMAND}"
         model: "${CONFIG_MODEL}"
         EOF
       generate_diff: |
         cd ${CONFIG_TOOL_LOCATION} &&
         source .venv/bin/activate &&
-        python -m auto_bug_fix.run_bug_fix ${CONFIG_CONFIG_FILE}
+        python -m auto_bug_fix.run_bug_fix ${CONFIG_CONFIG_FILE} &&
+        RUN_DIR=$(ls -d ${CONFIG_TOOL_LOCATION}/runs/${RUN_KEY}* | sort | tail -1) &&
+        cp ${ORIGINAL_DIFF_PATH} "$RUN_DIR/original.diff" &&
+        cp ${PIPELINE_DIFF_PATH} "$RUN_DIR/pipeline.diff"
       get_stats: |
         LOG=$(ls -d ${CONFIG_TOOL_LOCATION}/runs/${RUN_KEY}* | sort | tail -1)/run_log.txt
         echo $(grep -E '^TOTAL' "$LOG" | awk '{
@@ -227,36 +275,75 @@ tools:
 
     commands:
       generate_diff: |
-        claude -p "You are an expert software engineer performing a git backport.
-        TASK: Apply the following fix defined by ${ORIG_SHA} to the target branch `target` and produce a unified diff.
-        ## Instructions
-        1. Understand what the original fix does (the intent, not just the syntax).
-        2. Adapt the fix to the current code on the `target` branch — context may differ between branches.
-        3. Preserve the original intent: fix the same root cause, keep the same behaviour.
-        4. Output ONLY a valid unified diff in `git diff` format.
-        5. Do not include any explanation or commentary — just the raw diff starting with `diff --git`.
-
-        Begin your response with `diff --git` and end when the diff is complete." \
-          --output ${PIPELINE_DIFF_PATH}
+        claude -p "You are an expert software engineer performing a git backport. 
+		TASK: Apply the fix commited with SHA ${ORIG_SHA} to the branch target. 
+		Instructions
+		1. Understand what the original fix does (the intent, not just the syntax).
+		2. Adapt the fix to the current code on target — context may differ between branches.
+		3. Preserve the original intent: fix the same root cause, keep the same behaviour. 
+		4. Output ONLY a valid unified diff in git diff format in the file ${PIPELINE_DIFF_PATH}. Do not include any explanation or commentary — just the raw diff starting with diff --git. 
+		5. Write the following stats to the file /tmp/llm-stats.json in json format: 
+			- time (float):  Wall-clock seconds the tool spent generating the diff. 
+			- llm_calls (int): Number of LLM API calls made 
+			- cost (float): Total LLM API Cost in USD 
+			- input_tokens (int): Total input tokens consumed 
+			- output_tokens int Total output tokens consumed."
       get_stats: |
+		  cat /tmp/llm-stats.json
 ```
 
-#### Tool Definition
+#### Semantic Diff Output Schema
 
-Each key under `tools:` is a tool key (used on the CLI via `--tool <key>`). A tool definition contains:
+The `semantic_diff.command` must print a single JSON object to stdout. The orchestrator maps this to `semantic_equivalence` and `semantic_difference_reason`:
 
-| Field | Required | Description |
+```json
+{"equivalent": true}
+```
+
+```json
+{"equivalent": false, "reason": "The generated diff adds a null check but misses the retry logic present in the known-good backport."}
+```
+
+| Field | Type | Description |
 |---|---|---|
-| `display_name` | Yes | The name shown on the leaderboard (e.g., `"Amalgamator / Opus 4.6"`). This is the tool's identity for result storage and display. |
-| `model` | No | The LLM model this tool configuration uses. Exposed to commands as `${TOOL_MODEL}`. |
-| `config` | No | Arbitrary key-value parameters specific to the tool. Exposed to commands as `${CONFIG_<KEY>}` (uppercased). |
-| `commands.setup` | No | The `setup` command per FR-1. |
-| `commands.generate_diff` | Yes | The `generate_diff` command per FR-1. |
-| `commands.get_stats` | Yes | The `get_stats` command per FR-1. |
+| `equivalent` | boolean | `true` if the diffs are semantically equivalent; `false` otherwise |
+| `reason` | string | Required when `equivalent` is `false`. Brief explanation of the semantic difference. Ignored when `equivalent` is `true`. |
+
+When `equivalent` is `true`, the orchestrator sets `semantic_equivalence = PASS` and `semantic_difference_reason = null`. When `equivalent` is `false`, it sets `semantic_equivalence = FAIL` and `semantic_difference_reason` to the value of `reason`.
+
+#### Guideline Check Output Schema
+
+The `guideline_check.command` must print a single JSON object to stdout. The orchestrator maps this to `guideline_adherence` and `guideline_reason`:
+
+```json
+{"adheres": true}
+```
+
+```json
+{"adheres": false, "reason": "Commit message is missing the required DCO sign-off."}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `adheres` | boolean | `true` if the diff adheres to the repository's contributing guidelines; `false` otherwise |
+| `reason` | string | Required when `adheres` is `false`. Brief explanation of the guideline violation. Ignored when `adheres` is `true`. |
+
+When `adheres` is `true`, the orchestrator sets `guideline_adherence = PASS` and `guideline_reason = null`. When `adheres` is `false`, it sets `guideline_adherence = FAIL` and `guideline_reason` to the value of `reason`.
+
+#### Test Verification
+
+The global `verify_tests` setting controls whether the orchestrator checks that applying the generated diff does not introduce new test failures.
+
+| Value | Behavior |
+|---|---|
+| `true` | Before diff generation, run `${TEST_COMMAND}` on the target branch and store the baseline results. After diff generation, apply the generated diff and run `${TEST_COMMAND}` again. Set `test_success` to `PASS` if no new test failures appear compared to the baseline; set `test_success` to `FAIL` otherwise. |
+| `false` | Skip all test runs and set `test_success` to `SKIPPED`. |
+
+The test command for each repository comes from [`repos.md`](repos.md) and is exposed to the orchestrator as `${TEST_COMMAND}`.
 
 ### FR-3: Backport Dataset Management
 
-- The system must consume a dataset file (CSV or equivalent) with columns: `repo`, `original_commit`, `backport_commit`.
+- The system must consume a dataset file (CSV or equivalent) with columns: `repo`, `original_commit`, `backport_commit`, `classification`, `reason`.
 - The system must support adding new entries without disrupting existing results.
 - The system must clone and cache project repositories locally (under `projects/`).
 
@@ -265,11 +352,15 @@ Each key under `tools:` is a tool key (used on the CLI via `--tool <key>`). A to
 For each `(backport_entry, tool_config)` pair:
 
 1. **Repository setup** - Check out the project, identify the source branch containing the original commit, create the target branch at the commit preceding the backport, and create a baseline tag (`target-before`).
-2. **Diff generation** - Invoke the tool plugin to produce a candidate diff.
-3. **Equivalence check** - Compare the candidate diff against the known-good backport diff. Semantic equivalence (not byte-identical) is the standard; the comparison should tolerate ordering differences, whitespace, and context-line variation.
-4. **Metrics collection** - Gather structured stats from the tool plugin.
-5. **Result recording** - Write the outcome (pass/fail/error + metrics) to persistent storage.
-6. **Cleanup** - Remove all temporary branches, tags, and worktrees to leave the repository in a clean state.
+2. **Known-good diff capture** - Extract the unified diff for the backport commit (`${BACKPORT_SHA}`) and write it to `${ORIGINAL_DIFF_PATH}`. This is the ground-truth patch the tool's output will be compared against.
+3. **Baseline test run** *(when `verify_tests` is `true`)* - Run the repository's test command (`${TEST_COMMAND}`) on the target branch in `${TARGET_WORKSPACE}` and store the results as the baseline.
+4. **Diff generation** - Invoke the tool plugin to produce a candidate diff and write it to `${PIPELINE_DIFF_PATH}`.
+5. **Post-diff test run** *(when `verify_tests` is `true`)* - Apply the generated diff to `${TARGET_WORKSPACE}`, run `${TEST_COMMAND}` again, and compare the results to the baseline. Set `test_success` to `PASS` if no new test failures were introduced, or `FAIL` otherwise. When `verify_tests` is `false`, set `test_success` to `SKIPPED`.
+6. **Equivalence check** - Compare the candidate diff against the known-good backport diff at `${ORIGINAL_DIFF_PATH}`. Semantic equivalence (not byte-identical) is the standard; the comparison should tolerate ordering differences, whitespace, and context-line variation. When the diffs are not equivalent, record a `semantic_difference_reason` explaining why.
+7. **Guideline check** - Review the generated diff against the repository's contributing guidelines (from [`repos.md`](repos.md)). When the diff does not adhere, record a `guideline_reason` explaining why.
+8. **Metrics collection** - Gather structured stats from the tool plugin.
+9. **Result recording** - Write the outcome (pass/fail/error + metrics) to persistent storage.
+10. **Cleanup** - Remove all temporary branches, tags, and worktrees to leave the repository in a clean state.
 
 The orchestrator must be resilient to individual run failures (one error must not abort the entire batch) and must support resuming a batch from where it left off (skip entries that already have results).
 
@@ -371,7 +462,7 @@ The leaderboard reads all JSON files from a results directory and aggregates the
 
 #### Hosting
 
-The leaderboard should be deployable as a Gradio app on Hugging Face Spaces (or equivalent). It should auto-refresh periodically to pick up new results.
+The leaderboard should be deployable as a Gradio app on Hugging Face Spaces, OpenShift, or equivalent platforms. It should auto-refresh periodically to pick up new results.
 
 ### FR-7: CLI Interface
 
@@ -379,10 +470,20 @@ The system must be operable from the command line:
 
 | Command | Purpose |
 |---|---|
-| `run --tool <key>` | Execute a benchmark run for a tool (by config key) against the full dataset (or a subset via `--repo`, `--limit`). Uses `default_tool` if `--tool` is omitted. |
+| `run --tool <key>` | Execute a benchmark run for a tool (by config key) against the full dataset (or a subset via `--repo`, `--limit`, `--classification <Easy\|Medium\|Hard>`). Uses `default_tool` if `--tool` is omitted. |
 | `results --tool <key>` | Display results for a specific tool entry |
 | `leaderboard` | Display the leaderboard |
 | `add-backport --repo <repo> --original <sha> --backport <sha>` | Add an entry to the dataset |
+
+The `run` command supports filtering the dataset before execution:
+
+| Flag | Description |
+|---|---|
+| `--repo <repo>` | Run only entries for the given repository (e.g., `line/armeria`) |
+| `--limit <n>` | Run at most `n` entries from the filtered set |
+| `--classification <Easy\|Medium\|Hard>` | Run only entries with the given complexity classification |
+| `--original <sha>` | Run a single entry by original commit SHA |
+| `--backport <sha>` | Run a single entry by backport commit SHA (used with `--original`) |
 
 ### FR-8: Display Name as Identity
 
@@ -436,7 +537,11 @@ ToolConfig
 RunResult
   backport_entry: BackportEntry
   tool_config: ToolConfig
-  result: PASS | FAIL | ERROR
+  semantic_equivalence: PASS | FAIL | null
+  semantic_difference_reason: string | null   # populated when semantic_equivalence = FAIL
+  guideline_adherence: PASS | FAIL | null
+  guideline_reason: string | null             # populated when guideline_adherence = FAIL
+  test_success: PASS | FAIL | SKIPPED | null
   error_message: string | null
   diff_lines: int
   time_seconds: float

@@ -38,7 +38,8 @@ The system is driven by a single YAML config file that defines global settings a
 semantic_diff:
   model: "claude-opus-4-6"
   command: |
-    claude -m ${SEMANTIC_DIFF_MODEL} -p "Compare @${ORIGINAL_DIFF_PATH} and @${PIPELINE_DIFF_PATH}..."
+    claude -m ${SEMANTIC_DIFF_MODEL} -p "Compare @${ORIGINAL_DIFF_PATH} and @${PIPELINE_DIFF_PATH}...
+    Respond with JSON: {\"equivalent\": true} or {\"equivalent\": false, \"reason\": \"...\"}"
 
 default_tool: "amalgamator-opus"
 timeout: 1800
@@ -81,7 +82,7 @@ The orchestrator provides these variables to every command:
 | `${PROJECT_PATH}` | Absolute path to the local project clone |
 | `${SOURCE_BRANCH}` | Branch containing the original commit |
 | `${TARGET_WORKSPACE}` | Path to the isolated worktree for the target branch |
-| `${ORIGINAL_DIFF_PATH}` | Path to the known-good backport diff |
+| `${ORIGINAL_DIFF_PATH}` | Path where the orchestrator writes the known-good backport diff (extracted from `${BACKPORT_SHA}`) |
 | `${PIPELINE_DIFF_PATH}` | Path where `generate_diff` must write its output |
 
 Tool-specific `config` values are exposed as `${CONFIG_<KEY>}` (uppercased).
