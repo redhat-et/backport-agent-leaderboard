@@ -1,4 +1,6 @@
 import csv
+import difflib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,3 +99,63 @@ def filter_dataset(
     if limit is not None:
         filtered = filtered[:limit]
     return filtered
+
+
+def classify_backport(*, similarity: float, file_overlap: float) -> str:
+    if similarity >= 0.90 and file_overlap >= 0.80:
+        return "Easy"
+    if similarity >= 0.50 or file_overlap >= 0.50:
+        return "Medium"
+    return "Hard"
+
+
+def _extract_files_from_diff(diff_text: str) -> set[str]:
+    files = set()
+    for line in diff_text.splitlines():
+        match = re.match(r"^(?:---|\+\+\+) [ab]/(.+)$", line)
+        if match:
+            files.add(match.group(1))
+    return files
+
+
+def _normalize_diff(diff_text: str) -> str:
+    lines = []
+    for line in diff_text.splitlines():
+        if line.startswith("@@") or line.startswith("diff --git"):
+            continue
+        if line.startswith("index "):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _count_changed_lines(diff_text: str) -> int:
+    return sum(1 for line in diff_text.splitlines() if line.startswith(("+", "-")) and not line.startswith(("+++", "---")))
+
+
+def compute_metrics(original_diff: str, backport_diff: str) -> dict:
+    orig_norm = _normalize_diff(original_diff)
+    back_norm = _normalize_diff(backport_diff)
+
+    similarity = difflib.SequenceMatcher(None, orig_norm, back_norm).ratio()
+
+    orig_files = _extract_files_from_diff(original_diff)
+    back_files = _extract_files_from_diff(backport_diff)
+    union = orig_files | back_files
+    intersection = orig_files & back_files
+    file_overlap = len(intersection) / len(union) if union else 1.0
+
+    orig_lines = _count_changed_lines(original_diff)
+    back_lines = _count_changed_lines(backport_diff)
+    if max(orig_lines, back_lines) == 0:
+        size_ratio = 1.0
+    else:
+        size_ratio = min(orig_lines, back_lines) / max(orig_lines, back_lines)
+
+    return {
+        "similarity": round(similarity, 2),
+        "file_overlap": round(file_overlap, 2),
+        "size_ratio": round(size_ratio, 2),
+        "orig_files": len(orig_files),
+        "back_files": len(back_files),
+    }
