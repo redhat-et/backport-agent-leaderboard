@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "backport-bench-leaderboard"
+version = "0.1.0"
+description = "Gradio leaderboard app for Backport Agent benchmarks"
+requires-python = ">=3.12"
+dependencies = [
+    "gradio>=4.0",
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
