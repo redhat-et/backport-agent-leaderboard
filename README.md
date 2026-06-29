@@ -132,7 +132,23 @@ backport-agent-leaderboard/
 │   └── aggregated/              # Aggregated files for leaderboard
 │
 ├── diffs/                       # Retained diffs for debugging
-└── projects/                    # Cached repository clones
+├── projects/                    # Cached repository clones
+│
+├── run.py                       # Generic OpenShift job launcher + result collector
+│                                #   reads any evals/<repo>/config.yaml — no code changes
+│                                #   needed to add a new repo
+│
+├── evals/                       # Containerized evaluation harness (OpenShift)
+│   └── crate/                   # Reference implementation for crate/crate (Java/Maven)
+│       ├── Containerfile        # Pod image: JDK 24, Maven, Python, patch, git
+│       ├── config.yaml          # All tunable params (image, namespace, tools, dataset)
+│       ├── README.md            # Step-by-step: build image, push, configure, run, collect
+│       └── scripts/
+│           └── generic_claude_backport.py   # Raw Claude single-shot backporter
+│
+└── infra/                       # One-time OpenShift cluster setup
+    ├── rbac.yaml                # ServiceAccount + Role + RoleBinding for result persistence
+    └── README.md                # Login, RBAC, secrets, ConfigMaps — why + how
 ```
 
 ## How It Works
