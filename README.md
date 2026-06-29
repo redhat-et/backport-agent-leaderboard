@@ -39,7 +39,140 @@ cp config.example.yaml config.yaml
 # Edit config.yaml with your tool definitions and settings
 ```
 
-See [config.example.yaml](config.example.yaml) for a complete reference.
+See [config.example.yaml](config.example.yaml) for a complete reference. Here is an annotated example:
+
+```yaml
+# ---------------------------------------------------------------------------
+# Global settings
+# ---------------------------------------------------------------------------
+semantic_diff:
+  model: "claude-opus-4-6"
+  command: |
+    claude --model ${SEMANTIC_DIFF_MODEL} -p "Compare @${ORIGINAL_DIFF_PATH} and @${PIPELINE_DIFF_PATH} and determine if they are semantically equivalent.
+    Respond with a single JSON object and no other text:
+    - If equivalent: {\"equivalent\": true}
+    - If not equivalent: {\"equivalent\": false, \"reason\": \"<brief explanation>\"}"
+
+guideline_check:
+  model: "claude-opus-4-6"
+  command: |
+    claude --model ${GUIDELINE_CHECK_MODEL} -p "Review @${PIPELINE_DIFF_PATH} against the following contributing guidelines: ${REPO_GUIDELINES}
+    Respond with a single JSON object and no other text:
+    - If adheres: {\"adheres\": true}
+    - If not adheres: {\"adheres\": false, \"reason\": \"<brief explanation>\"}"
+
+default_tool: "amalgamator-opus"
+timeout: 50000
+verify_tests: true
+
+tools:
+  amalgamator-opus-with-build-test:
+    display_name: "Amalgamator / Opus 4.6 with build and test"  
+    model: "claude-opus-4-6"
+    config:
+      tool_location: "/Users/ricmitch/Code/bug-fix/amalgamator"
+      workdir: "/tmp/amalgamator"
+      config_file: "/tmp/amalgamator"
+
+    commands:
+      setup: |
+        mkdir -p ${CONFIG_WORKDIR}
+        cat > ${CONFIG_WORKDIR}/${RUN_KEY}-config.yaml <<EOF
+        issue_id: "${RUN_KEY}"
+        bug_description: "${ORIG_SHA}"
+        output:
+          directory: ${CONFIG_WORKDIR}/
+        repository:
+          source_path: "${PROJECT_PATH}"
+          workdir: "${CONFIG_WORKDIR}/"
+        branches:
+          source: "${SOURCE_BRANCH}"
+          target: "target"
+        fix:
+          commit: "${ORIG_SHA}"
+        build:
+          command: "${BUILD_CMD}"
+          test_command: "${TEST_COMMAND}"
+        model: "${CONFIG_MODEL}"
+        EOF
+      generate_diff: |
+        cd ${CONFIG_TOOL_LOCATION} &&
+        source .venv/bin/activate &&
+        python -m auto_bug_fix.run_bug_fix ${CONFIG_CONFIG_FILE}/${RUN_KEY}-config.yaml &&
+        cd ${CONFIG_WORKDIR}/${RUN_KEY} &&
+        git diff ${BACKPORT_SHA}^..HEAD > ${PIPELINE_DIFF_PATH}
+      get_stats: |
+        LOG=$(ls -d ${CONFIG_TOOL_LOCATION}/runs/${RUN_KEY}* | sort | tail -1)/run_log.txt
+        echo $(grep -E '^TOTAL' "$LOG" | awk '{
+          gsub(/s$/, "", $2); gsub(/,/, "", $4); gsub(/\$/, "", $5);
+          printf "{\"time\": %s, \"llm_calls\": %s, \"cost\": %s, \"input_tokens\": %s}", $2, $3, $5, $4
+        }')
+
+  amalgamator-opus:
+    display_name: "Amalgamator / Opus 4.6 with build and test"  
+    model: "claude-opus-4-6"
+    config:
+      tool_location: "/Users/ricmitch/Code/bug-fix/amalgamator"
+      workdir: "/tmp/amalgamator"
+      config_file: "/tmp/amalgamator"
+
+    commands:
+      setup: |
+        mkdir -p ${CONFIG_WORKDIR}
+        cat > ${CONFIG_WORKDIR}/${RUN_KEY}-config.yaml <<EOF
+        issue_id: "${RUN_KEY}"
+        bug_description: "${ORIG_SHA}"
+        output:
+          directory: ${CONFIG_WORKDIR}/
+        repository:
+          source_path: "${PROJECT_PATH}"
+          workdir: "${CONFIG_WORKDIR}/"
+        branches:
+          source: "${SOURCE_BRANCH}"
+          target: "target"
+        fix:
+          commit: "${ORIG_SHA}"
+        build:
+          command: ""
+          test_command: ""
+        model: "${CONFIG_MODEL}"
+        EOF
+      generate_diff: |
+        cd ${CONFIG_TOOL_LOCATION} &&
+        source .venv/bin/activate &&
+        python -m auto_bug_fix.run_bug_fix ${CONFIG_CONFIG_FILE}/${RUN_KEY}-config.yaml &&
+        cd ${CONFIG_WORKDIR}/${RUN_KEY} &&
+        git diff ${BACKPORT_SHA}^..HEAD > ${PIPELINE_DIFF_PATH}
+      get_stats: |
+        LOG=$(ls -d ${CONFIG_TOOL_LOCATION}/runs/${RUN_KEY}* | sort | tail -1)/run_log.txt
+        echo $(grep -E '^TOTAL' "$LOG" | awk '{
+          gsub(/s$/, "", $2); gsub(/,/, "", $4); gsub(/\$/, "", $5);
+          printf "{\"time\": %s, \"llm_calls\": %s, \"cost\": %s, \"input_tokens\": %s}", $2, $3, $5, $4
+        }')
+
+  claude-code:
+    display_name: "Claude Code / default"
+    model: "claude-opus-4-6"
+    config: {}
+
+    commands:
+      generate_diff: |
+        claude -p "You are an expert software engineer performing a git backport.
+        TASK: Apply the fix commited with SHA ${ORIG_SHA} to the branch target.
+        Instructions
+        1. Understand what the original fix does (the intent, not just the syntax).
+        2. Adapt the fix to the current code on target — context may differ between branches.
+        3. Preserve the original intent: fix the same root cause, keep the same behaviour.
+        4. Output ONLY a valid unified diff in git diff format in the file ${PIPELINE_DIFF_PATH}. Do not include any explanation or commentary — just the raw diff starting with diff --git.
+        5. Write the following stats to the file /tmp/llm-stats.json in json format:
+            - time (float):  Wall-clock seconds the tool spent generating the diff.
+            - llm_calls (int): Number of LLM API calls made
+            - cost (float): Total LLM API Cost in USD
+            - input_tokens (int): Total input tokens consumed
+            - output_tokens int Total output tokens consumed."
+      get_stats: |
+        cat /tmp/llm-stats.json
+```
 
 ### 2. Run benchmarks
 
