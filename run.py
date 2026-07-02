@@ -786,14 +786,9 @@ def build_amalgamator_job(case: dict, cfg: dict) -> str:
                   echo "=== Measure diff size ==="
                   AMAL_WORKDIR="/tmp/pipeline-workdir/{issue_id}"
                   if [ -d "$AMAL_WORKDIR/.git" ]; then
-                    # Count lines changed by all commits the pipeline added on top of
-                    # the initial state (first/root commit of the workdir = pre-fix baseline)
-                    FIRST_COMMIT=$(cd "$AMAL_WORKDIR" && git rev-list --max-parents=0 HEAD 2>/dev/null | head -1)
-                    if [ -n "$FIRST_COMMIT" ]; then
-                      DIFF_LINES=$(cd "$AMAL_WORKDIR" && git diff "$FIRST_COMMIT" HEAD -- 2>/dev/null | grep -c "^[+-]" || echo 0)
-                    else
-                      DIFF_LINES=$(cd "$AMAL_WORKDIR" && git show HEAD -- 2>/dev/null | grep -c "^[+-]" || echo 0)
-                    fi
+                    # Compare from pre_fix (the commit before the ground-truth backport)
+                    # to HEAD (the Amalgamator's result) — this is exactly what the pipeline changed.
+                    DIFF_LINES=$(cd "$AMAL_WORKDIR" && git diff {pre_fix} HEAD -- 2>/dev/null | grep -c "^[+-]" || echo 0)
                   else
                     DIFF_LINES=0
                   fi
