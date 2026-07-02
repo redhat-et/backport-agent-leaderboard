@@ -1,0 +1,29 @@
+# django/django evaluation image
+#
+# Build from this directory:
+#   podman build -t quay.io/<your-org>/django-backport-test:latest .
+#   podman push quay.io/<your-org>/django-backport-test:latest
+FROM python:3.12
+
+# git   — clone the repo
+# patch — apply the generated diff
+# curl  — download uv (Amalgamator dependency installer)
+# gettext — Django's i18n tests require it
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git patch curl gettext \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# OpenShift runs pods as a random non-root UID with no home directory.
+# HOME=/tmp lets pip and other tools write to /tmp/.cache, /tmp/.local etc.
+ENV HOME=/tmp
+ENV PIP_CACHE_DIR=/tmp/.pip-cache
+
+# Pre-install Django's test dependencies so pod startup is faster.
+# These rarely change — only rebuild the image when they do.
+# Do NOT install Django globally — tests run against the cloned source tree.
+# Only install test support libraries that Django's test suite needs.
+RUN pip install --no-cache-dir \
+      pillow numpy argon2-cffi bcrypt \
+      anthropic[vertex] google-auth
+
+COPY scripts/generic_claude_backport.py /opt/generic_claude_backport.py

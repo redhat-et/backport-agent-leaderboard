@@ -1,0 +1,22 @@
+# Backport Agent Leaderboard — Gradio app
+#
+# Build from the repo root:
+#   podman build --platform linux/amd64 \
+#     -f infra/leaderboard/Containerfile \
+#     -t quay.io/supathak/backport-leaderboard:latest .
+#   podman push quay.io/supathak/backport-leaderboard:latest
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir gradio pandas
+
+# Only the leaderboard app — results come from live ConfigMaps via k8s API
+COPY leaderboard/ /app/leaderboard/
+
+# OpenShift runs pods as a random non-root UID
+ENV HOME=/tmp
+
+EXPOSE 7860
+
+CMD ["python", "/app/leaderboard/app.py"]

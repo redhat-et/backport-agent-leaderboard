@@ -136,6 +136,15 @@ Begin your response with `diff --git` and end when the diff is complete."""
     usage = response.usage
     log.info("Done — %d lines written to %s", raw.count("\n"), args.out)
     log.info("Token usage — input: %d, output: %d", usage.input_tokens, usage.output_tokens)
+    # Pricing: claude-opus-4-6 = $15/M input, $75/M output (claude-sonnet ≈ $3/$15)
+    # Use conservative opus pricing as default; actual cost depends on model
+    if "opus" in args.model.lower():
+        cost = (usage.input_tokens * 15.0 + usage.output_tokens * 75.0) / 1_000_000
+    elif "sonnet" in args.model.lower():
+        cost = (usage.input_tokens * 3.0 + usage.output_tokens * 15.0) / 1_000_000
+    else:
+        cost = (usage.input_tokens * 3.0 + usage.output_tokens * 15.0) / 1_000_000
+    log.info("COST_USD: %.4f", cost)
 
 
 if __name__ == "__main__":

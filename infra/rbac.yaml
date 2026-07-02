@@ -10,7 +10,9 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["create", "update", "patch", "get"]
+  # create/update/patch — eval pods save results
+  # get/list           — collector reads results back
+  verbs: ["create", "update", "patch", "get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -22,4 +24,31 @@ subjects:
 roleRef:
   kind: Role
   name: configmap-writer
+  apiGroup: rbac.authorization.k8s.io
+---
+# Leaderboard pod — read-only access to result ConfigMaps
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: leaderboard-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-reader
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: leaderboard-reader-binding
+subjects:
+- kind: ServiceAccount
+  name: leaderboard-reader
+roleRef:
+  kind: Role
+  name: configmap-reader
   apiGroup: rbac.authorization.k8s.io

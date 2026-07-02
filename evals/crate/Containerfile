@@ -30,7 +30,7 @@ RUN mkdir -p /workspace && chmod 777 /workspace
 # to avoid root-ownership issues in OpenShift's random-UID environment.
 
 # Bake in the Raw Claude backport script
-COPY generic_claude_backport.py /opt/generic_claude_backport.py
+COPY scripts/generic_claude_backport.py /opt/generic_claude_backport.py
 
 WORKDIR /workspace
 

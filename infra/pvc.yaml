@@ -1,0 +1,13 @@
+# Persistent volume for the leaderboard Gradio app.
+# Mounted at /results inside the leaderboard pod.
+# Results are pushed here with: python3 run.py --push-results
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: leaderboard-results
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,67 @@
+# Leaderboard Gradio app — OpenShift deployment
+#
+# Deploys the Gradio leaderboard as a long-running pod with a public Route.
+# Results are read live from result-* ConfigMaps in the same namespace.
+#
+# Apply with:
+#   oc apply -f infra/rbac.yaml -n backport-agent-leaderboard
+#   oc apply -f infra/leaderboard/leaderboard.yaml -n backport-agent-leaderboard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backport-leaderboard
+  labels:
+    app: backport-leaderboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backport-leaderboard
+  template:
+    metadata:
+      labels:
+        app: backport-leaderboard
+    spec:
+      serviceAccountName: leaderboard-reader
+      containers:
+        - name: leaderboard
+          image: quay.io/supathak/backport-leaderboard:latest
+          ports:
+            - containerPort: 7860
+          env:
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backport-leaderboard
+spec:
+  selector:
+    app: backport-leaderboard
+  ports:
+    - port: 7860
+      targetPort: 7860
+---
+# OpenShift Route — creates a public HTTPS URL automatically
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: backport-leaderboard
+spec:
+  to:
+    kind: Service
+    name: backport-leaderboard
+  port:
+    targetPort: 7860
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

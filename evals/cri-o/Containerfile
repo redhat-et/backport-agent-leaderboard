@@ -1,0 +1,32 @@
+# cri-o/cri-o evaluation image
+#
+# Build from this directory:
+#   podman build -t quay.io/<your-org>/crio-backport-test:latest .
+#   podman push quay.io/<your-org>/crio-backport-test:latest
+#
+# Why Go 1.22? cri-o requires Go 1.22+. Using the official golang image
+# ensures the correct version and avoids manual Go installation.
+FROM golang:1.23
+
+# git   — clone the repo
+# patch — apply the generated diff
+# python3/pip — run Raw Claude script + install Vertex AI SDK
+# make  — cri-o's build system
+# libseccomp-dev / libgpgme-dev / pkg-config — required by cri-o's CGo deps
+# curl  — download uv (Amalgamator dependency installer)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git patch python3 python3-pip curl make \
+      libseccomp-dev libgpgme-dev pkg-config \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# OpenShift runs pods as a random non-root UID with no home directory.
+# Setting HOME=/tmp ensures all tools (go, pip, git) can write their caches.
+ENV HOME=/tmp
+ENV GOPATH=/tmp/go
+ENV GOCACHE=/tmp/go-cache
+ENV GOMODCACHE=/tmp/go/pkg/mod
+
+# Bake the Raw Claude script into the image.
+# The eval-result-writer ConfigMap mount at /opt/script/ takes precedence at
+# runtime, so updating the script only requires re-uploading the ConfigMap.
+COPY scripts/generic_claude_backport.py /opt/generic_claude_backport.py
