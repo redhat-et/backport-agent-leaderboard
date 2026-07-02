@@ -167,26 +167,38 @@ def _tool_label(key: str) -> str:
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
+def _patch_applied(r: dict) -> bool:
+    """Return True if the agent successfully applied a patch to the repo."""
+    # Explicit field (newest results)
+    pa = r.get("patch_applied")
+    if pa is not None:
+        return pa == "PASS"
+    # Inference for results without patch_applied (results from pods launched before
+    # that field was added). The pod sets SEM_EQ_REASON only when the patch applied:
+    #   - "Patch differs from ground truth…"  → applied but differs
+    #   - sem_eq == "PASS"                    → applied and matches ground truth
+    #   - sem_why is None and sem_eq == "FAIL" → patch did NOT apply
+    sem_eq = r.get("semantic_equivalence", "FAIL")
+    if sem_eq == "PASS":
+        return True
+    reason = r.get("semantic_difference_reason") or ""
+    if "ground truth" in reason:
+        return True   # applied but differs from ground truth
+    return False
+
+
 def _apply_rate(results: list[dict]) -> float | None:
     """Fraction of cases where the patch applied cleanly (patch exit 0)."""
     if not results:
         return None
-    def applied(r):
-        # New field: patch_applied. Fall back to semantic_equivalence for old results.
-        pa = r.get("patch_applied")
-        if pa is not None:
-            return pa == "PASS"
-        return r.get("semantic_equivalence") == "PASS"
-    return round(sum(1 for r in results if applied(r)) / len(results), 4)
+    return round(sum(1 for r in results if _patch_applied(r)) / len(results), 4)
 
 def _full_pass_rate(results: list[dict]) -> float | None:
     """Fraction where patch applied AND tests passed AND baseline was clean."""
     if not results:
         return None
     def ok(r):
-        pa = r.get("patch_applied")
-        applied = (pa == "PASS") if pa is not None else (r.get("semantic_equivalence") == "PASS")
-        return (applied
+        return (_patch_applied(r)
                 and r.get("test_success") == "PASS"
                 and r.get("baseline_test") == "PASS")
     return round(sum(1 for r in results if ok(r)) / len(results), 4)
@@ -259,10 +271,7 @@ def build_runs_df(results: list[dict]) -> pd.DataFrame:
         tool_key = r.get("tool_key", "unknown")
         slug     = r.get("slug", "")
         repo     = r.get("repo", "")
-        # patch_applied is the new explicit field; fall back to sem_eq for old results
-        pa = r.get("patch_applied") or (
-            "PASS" if r.get("semantic_equivalence") == "PASS" else "FAIL"
-        )
+        pa = "PASS" if _patch_applied(r) else "FAIL"
         rows.append({
             "Tool":         _tool_label(tool_key),
             "Repo":         repo,
