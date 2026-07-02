@@ -357,6 +357,7 @@ JSON_BUILDER = """\
                       'original_commit':           '{orig}',
                       'backport_commit':           '{backport}',
                       'classification':            '{difficulty}',
+                      'patch_applied':             'PASS' if apply == 'SUCCESS' else 'FAIL',
                       'semantic_equivalence':      sem_eq,
                       'semantic_difference_reason': sem_why,
                       'guideline_adherence':       None,

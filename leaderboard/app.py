@@ -16,15 +16,16 @@ DEFAULT_RESULTS_DIR = (
 
 _DISPLAY_COLS = [
     "Tool", "Repo", "Slug", "Difficulty",
-    "Apply", "Reason", "Test", "Baseline",
+    "Applied", "Sem.Eq.", "Reason", "Test", "Baseline",
     "Diff Lines", "Cost $", "Secs",
 ]
 
 # Map column name → log section to show when that column is clicked
 _COL_TO_LOG_SECTION = {
-    "Baseline": "Baseline test (pre-patch)",
-    "Test":     "Post-pipeline test",
-    "Apply":    "Measure diff size",
+    "Baseline":   "Baseline test (pre-patch)",
+    "Test":       "Post-pipeline test",
+    "Applied":    "Measure diff size",
+    "Sem.Eq.":    "Semantic equivalence",
     "Diff Lines": "Measure diff size",
 }
 
@@ -56,13 +57,13 @@ def create_app() -> gr.Blocks:
                 gr.Markdown("""
 Each cell shows **Apply Rate / Full Pass Rate** for that repo.
 
-| Symbol | Meaning |
+| Metric | Meaning |
 |--------|---------|
-| **Apply Rate** | Did the agent produce a non-empty patch that applied cleanly? |
-| **Full Pass Rate** | Did the patch apply AND the unit tests pass AND the baseline was clean? |
-| ⏳ | Jobs are still running — no results yet for this tool + repo |
-| 0.0% | Results are in, but all cases failed |
-| — | No data (unexpected) |
+| **Apply Rate** | Did the agent produce a patch that applied cleanly (`patch` exit 0)? |
+| **Full Pass Rate** | Patch applied AND unit tests passed AND baseline was clean? |
+| **Sem.Eq.** *(in All Runs)* | Agent's patch exactly matches the ground-truth backport commit |
+| ⏳ | Jobs still running — no results yet |
+| 0.0% | Results in, but all cases failed |
                 """)
                 lb_table = gr.Dataframe(value=lb_df, interactive=False, wrap=True)
 

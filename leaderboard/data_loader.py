@@ -7,9 +7,13 @@ Two sources (tried in order):
 
 Scoring definitions
 -------------------
-semantic_equivalence (Sem.Equiv / Apply)
-  PASS = the agent produced a non-empty patch that applied successfully.
-  FAIL = patch did not apply, or applied but produced zero changed lines.
+patch_applied (Apply)
+  PASS = the agent produced a non-empty patch that applied cleanly (patch exit 0).
+  FAIL = patch was empty or failed to apply.
+
+semantic_equivalence (Sem.Eq.)
+  PASS = the agent's patch is byte-for-byte identical to the ground-truth backport commit.
+  FAIL = the patch differs from the ground truth (even if tests pass).
 
 test_success (Test)
   PASS = the repo's unit tests passed AFTER applying the backport.
@@ -164,18 +168,34 @@ def _tool_label(key: str) -> str:
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 def _apply_rate(results: list[dict]) -> float | None:
+    """Fraction of cases where the patch applied cleanly (patch exit 0)."""
     if not results:
         return None
-    return round(sum(1 for r in results if r.get("semantic_equivalence") == "PASS") / len(results), 4)
+    def applied(r):
+        # New field: patch_applied. Fall back to semantic_equivalence for old results.
+        pa = r.get("patch_applied")
+        if pa is not None:
+            return pa == "PASS"
+        return r.get("semantic_equivalence") == "PASS"
+    return round(sum(1 for r in results if applied(r)) / len(results), 4)
 
 def _full_pass_rate(results: list[dict]) -> float | None:
+    """Fraction where patch applied AND tests passed AND baseline was clean."""
     if not results:
         return None
     def ok(r):
-        return (r.get("semantic_equivalence") == "PASS"
+        pa = r.get("patch_applied")
+        applied = (pa == "PASS") if pa is not None else (r.get("semantic_equivalence") == "PASS")
+        return (applied
                 and r.get("test_success") == "PASS"
                 and r.get("baseline_test") == "PASS")
     return round(sum(1 for r in results if ok(r)) / len(results), 4)
+
+def _sem_eq_rate(results: list[dict]) -> float | None:
+    """Fraction where agent patch exactly matches ground-truth backport commit."""
+    if not results:
+        return None
+    return round(sum(1 for r in results if r.get("semantic_equivalence") == "PASS") / len(results), 4)
 
 def _fmt(v: float | None, pending: bool = False) -> str:
     if v is None:
@@ -239,12 +259,17 @@ def build_runs_df(results: list[dict]) -> pd.DataFrame:
         tool_key = r.get("tool_key", "unknown")
         slug     = r.get("slug", "")
         repo     = r.get("repo", "")
+        # patch_applied is the new explicit field; fall back to sem_eq for old results
+        pa = r.get("patch_applied") or (
+            "PASS" if r.get("semantic_equivalence") == "PASS" else "FAIL"
+        )
         rows.append({
             "Tool":         _tool_label(tool_key),
             "Repo":         repo,
             "Slug":         slug,
             "Difficulty":   r.get("classification", ""),
-            "Apply":        r.get("semantic_equivalence", ""),
+            "Applied":      pa,
+            "Sem.Eq.":      r.get("semantic_equivalence", ""),
             "Reason":       r.get("semantic_difference_reason") or "",
             "Test":         r.get("test_success", ""),
             "Baseline":     r.get("baseline_test", ""),
