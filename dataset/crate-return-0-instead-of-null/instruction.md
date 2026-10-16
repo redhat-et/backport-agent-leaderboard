@@ -1,0 +1,1 @@
+Backport the fix "Return 0 instead of NULL in hyperloglog_distinct if no rows match filter" (commit 3247cc6e, branch 'source') onto branch 'target' so that the project builds and its complete test suite passes.

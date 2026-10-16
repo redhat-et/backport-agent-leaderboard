@@ -1,0 +1,38 @@
+issue_id: "django-password-reset-fix"
+bug_description: >
+  Backport security fix for password resets from main to stable/1.4.x.
+
+repository:
+  source_path: /workspace/django
+  workdir: /tmp/amalgamator-django
+
+branches:
+  source: origin/main
+  target: target
+
+fix:
+  commit: "9305c0e12d43c4df999c3301a1f0c742264a657e"
+
+build:
+  command: ""
+  # Django 1.4.x's own framework code (not just this fix) is Python-2-only
+  # syntax (see environment/Dockerfile). python2.7 is built from source
+  # there specifically to run this.
+  # - PYTHONPATH=.. : runtests.py does `from django import contrib` at
+  #   import time with no path setup of its own; it needs the repo root
+  #   (one level up from tests/) on the path.
+  # - --settings=test_sqlite : tests/test_sqlite.py is the repo's own
+  #   ready-made settings module for running the suite locally.
+  # - `auth` : scope to the module the fix actually touches. Confirmed via
+  #   baseline run: unscoped/full suite needs services (memcached, GIS,
+  #   etc.) this minimal container doesn't have, which is unrelated noise.
+  #   Baseline (no patch) on just `auth`: 135/135 pass, clean signal.
+  test_command: "cd tests && PYTHONPATH=.. python2.7 runtests.py --settings=test_sqlite auth"
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 131072
+  command_timeout: 600
+  max_build_test_retries: 5

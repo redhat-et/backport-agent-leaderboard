@@ -1,0 +1,34 @@
+# Dataset manifest for redhat-et/amalgamator-tasks
+# Add tasks using: harbor add <org>/<name>
+# Publish using: harbor publish
+
+[dataset]
+name = "redhat-et/amalgamator-tasks"
+version = "1.0.0"
+description = "Bug-fix backport tasks for benchmarking Amalgamator: real fix commits from django, crate, and cri-o, human backports as golden solutions, and independent build-and-test verification."
+keywords = [ "backport", "bug-fix", "benchmark", "amalgamator", "harbor",]
+[[dataset.authors]]
+name = "Surya Pathak"
+email = "supathak@redhat.com"
+
+
+[[tasks]]
+name = "redhat-et/django-password-reset-fix"
+digest = "sha256:991052f73f7bf3b7f0c5301add14ded8d988371b6d56d8c5c286cd894b91c1b2"
+
+[[tasks]]
+name = "redhat-et/crio-coco-imageserver-release-1-36"
+digest = "sha256:4dea6e9798cbef18857d94ef3492d86fa76bd7406ac2c268392c946d763b4cd3"
+
+[[tasks]]
+name = "redhat-et/expat-cve-2025-59375-c8s"
+digest = "sha256:8df9b9a4a183516c419b215d757611f90443746fedb0e0eabfbb3e549a004864"
+
+[[tasks]]
+name = "redhat-et/expat-cve-2025-59375-c9s"
+digest = "sha256:0a0dffd327a3e8fc09ee3255e2df18f9f98ef5e5f358e21c3c980e5850db90c7"
+
+[[tasks]]
+name = "redhat-et/expat-cve-2025-59375-c10s"
+digest = "sha256:e3491439dd4b4dceadd41642e42413d614079eaf87f602ed97314962b904743c"
+

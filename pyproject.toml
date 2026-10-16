@@ -1,33 +1,22 @@
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "backport-bench"
-version = "0.1.0"
-description = "Benchmark orchestrator for automated backporting tools"
-requires-python = ">=3.12"
+name = "backport-agent-leaderboard"
+version = "0.2.0"
+description = "Backport benchmark: Harbor dataset, evaluation docs, and results for backporting pipelines"
+readme = "README.md"
+authors = [
+    { name = "Surya Prakash Pathak", email = "supathak@redhat.com" },
+    { name = "Taylor Agarwal", email = "taagarwa@redhat.com" },
+]
+requires-python = ">=3.13"
 dependencies = [
-    "click>=8.1",
-    "pyyaml>=6.0",
-    "pydantic>=2.0",
+    "harbor>=0.23.0",
 ]
 
-[project.optional-dependencies]
-leaderboard = [
-    "gradio>=4.0",
-    "pandas>=2.0",
-]
-dev = [
-    "pytest>=8.0",
-    "pytest-bdd>=7.0",
-]
+[build-system]
+requires = ["uv_build>=0.11.1,<0.12.0"]
+build-backend = "uv_build"
 
-[project.scripts]
-backport-bench = "backport_bench.cli:cli"
-
-[tool.setuptools.packages.find]
-include = ["backport_bench*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests", "leaderboard/tests"]
+# The Python package keeps its original name so agent references stay stable:
+#   -a amalgamator_tasks.amalgamator:Amalgamator
+[tool.uv.build-backend]
+module-name = "amalgamator_tasks"

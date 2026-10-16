@@ -1,0 +1,1 @@
+Backport the fix "Account for direct buffers when constructing an http result set" (commit 834640ed, branch 'source') onto branch 'target' so that the project builds and its complete test suite passes.

@@ -1,0 +1,25 @@
+schema_version = "1.3"
+artifacts = ["/workspace/workdir", "/workspace/amalgamator/runs", "/workspace/case.yaml"]
+
+[task]
+name = "redhat-et/crate-fix-a-race-condition-swallowing-pgwire"
+authors = [{ name = "Surya Prakash Pathak", email = "supathak@redhat.com" }]
+
+[metadata]
+difficulty = "hard"
+difficulty_explanation = """
+Hard crate/crate backport (similarity=0.34; file_overlap=0.75; size_ratio=0.96; orig_files=4; back_files=3).
+Original fix 5afcf369 on main -> human backport 8998913d. Golden = the real
+human backport diff. Verification = full test-compile + full `./mvnw test`.
+"""
+category = "programming"
+
+[verifier]
+timeout_sec = 18000.0
+
+[agent]
+timeout_sec = 18000.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 3600.0

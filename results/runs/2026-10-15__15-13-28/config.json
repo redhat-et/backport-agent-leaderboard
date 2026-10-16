@@ -1,0 +1,16 @@
+{
+    "agents": [
+        {
+            "name": "amalgamator_tasks.amalgamator:Amalgamator",
+            "model_name": "openai/rits/zai-org/glm-5-3"
+        }
+    ],
+    "datasets": [
+        {
+            "path": "dataset",
+            "task_names": [
+                "expat-cve-2025-59375-c10s"
+            ]
+        }
+    ]
+}

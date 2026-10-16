@@ -1,0 +1,29 @@
+issue_id: "crate-preserve-detailedquery-in-collect-on-prune"
+bug_description: >
+  Backport the fix "Preserve detailedQuery in Collect on prune & fetch rewrite" (commit a9199b9f, branch 'source') onto branch
+  'target' so that the project builds and its complete test suite passes.
+
+repository:
+  source_path: /workspace/crate
+  workdir: /workspace/workdir
+
+branches:
+  source: source
+  target: target
+
+fix:
+  commit: "a9199b9f781a9db3a49c1a8341e6837d63ed7980"
+
+build:
+  # Whole-project compile including all test sources (fast structural gate).
+  command: "crate-mvn test-compile"
+  # Full unit-test suite across every module (the pass/fail gate).
+  test_command: "crate-mvn test"
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 200000
+  command_timeout: 3600
+  max_build_test_retries: 4

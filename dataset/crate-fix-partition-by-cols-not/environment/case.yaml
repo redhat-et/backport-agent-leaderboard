@@ -1,0 +1,29 @@
+issue_id: "crate-fix-partition-by-cols-not"
+bug_description: >
+  Backport the fix "Fix partition by cols not in group by" (commit 422c9d48, branch 'source') onto branch
+  'target' so that the project builds and its complete test suite passes.
+
+repository:
+  source_path: /workspace/crate
+  workdir: /workspace/workdir
+
+branches:
+  source: source
+  target: target
+
+fix:
+  commit: "422c9d48ae8aee46e0e7550e26d8d326cfa6468d"
+
+build:
+  # Whole-project compile including all test sources (fast structural gate).
+  command: "crate-mvn test-compile"
+  # Full unit-test suite across every module (the pass/fail gate).
+  test_command: "crate-mvn test"
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 200000
+  command_timeout: 3600
+  max_build_test_retries: 4

@@ -1,0 +1,25 @@
+schema_version = "1.3"
+artifacts = ["/workspace/workdir", "/workspace/amalgamator/runs", "/workspace/case.yaml"]
+
+[task]
+name = "redhat-et/crate-preserve-detailedquery-in-collect-on-prune"
+authors = [{ name = "Surya Prakash Pathak", email = "supathak@redhat.com" }]
+
+[metadata]
+difficulty = "hard"
+difficulty_explanation = """
+Hard crate/crate backport (similarity=0.32; file_overlap=0.67; size_ratio=0.89; orig_files=3; back_files=2).
+Original fix a9199b9f on main -> human backport 729957bc. Golden = the real
+human backport diff. Verification = full test-compile + full `./mvnw test`.
+"""
+category = "programming"
+
+[verifier]
+timeout_sec = 18000.0
+
+[agent]
+timeout_sec = 18000.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 3600.0

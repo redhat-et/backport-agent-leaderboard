@@ -1,0 +1,28 @@
+schema_version = "1.3"
+# /tmp/amalgamator-django: the patched worktree (final repo state after the
+#   agent's cherry-pick/backport, whatever it ends up looking like).
+# /workspace/amalgamator/runs: Amalgamator's OWN run archive -- tracker JSONs,
+#   per-phase logs, the candidate diff, dossier.md, amalgamator_stats.json.
+#   This is where the full untruncated pipeline detail lives (Harbor's own
+#   trial.log truncates long command output at ~1000 chars, so without this
+#   you only get a summary, not the real per-phase record).
+artifacts = ["/tmp/amalgamator-django", "/workspace/amalgamator/runs", "/workspace/case.yaml"]
+
+[task]
+name = "redhat-et/django-password-reset-fix"
+authors = [{ name = "Surya Pathak", email = "supathak@redhat.com" }]
+
+[metadata]
+difficulty_explanation = "Trivial task for demonstration"
+category = "programming"
+
+[verifier]
+timeout_sec = 600.0
+
+[agent]
+# Real LLM run needs headroom for multiple phases (triage, cherry-pick,
+# build/test verify, possible 4a/4b retry loop) -- 600s was oracle-sized.
+timeout_sec = 1800.0
+
+[environment]
+network_mode = "public"

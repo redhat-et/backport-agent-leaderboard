@@ -1,0 +1,29 @@
+issue_id: "crate-return-0-instead-of-null"
+bug_description: >
+  Backport the fix "Return 0 instead of NULL in hyperloglog_distinct if no rows match filter" (commit 3247cc6e, branch 'source') onto branch
+  'target' so that the project builds and its complete test suite passes.
+
+repository:
+  source_path: /workspace/crate
+  workdir: /workspace/workdir
+
+branches:
+  source: source
+  target: target
+
+fix:
+  commit: "3247cc6e48a2d4da79bf8aa4ca77d750af5e164a"
+
+build:
+  # Whole-project compile including all test sources (fast structural gate).
+  command: "crate-mvn test-compile"
+  # Full unit-test suite across every module (the pass/fail gate).
+  test_command: "crate-mvn test"
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 200000
+  command_timeout: 3600
+  max_build_test_retries: 4

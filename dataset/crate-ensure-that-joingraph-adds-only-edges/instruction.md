@@ -1,0 +1,1 @@
+Backport the fix "Ensure that JoinGraph adds only edges for equi-join conditions" (commit 4f42b38d, branch 'source') onto branch 'target' so that the project builds and its complete test suite passes.

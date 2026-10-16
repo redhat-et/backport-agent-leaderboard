@@ -1,0 +1,29 @@
+issue_id: "crate-fix-error-handling-on-insert"
+bug_description: >
+  Backport the fix "Fix error handling on insert-from-values statements" (commit f1101877, branch 'source') onto branch
+  'target' so that the project builds and its complete test suite passes.
+
+repository:
+  source_path: /workspace/crate
+  workdir: /workspace/workdir
+
+branches:
+  source: source
+  target: target
+
+fix:
+  commit: "f110187717d7d702d7f16abdf9bced3a62a5d90e"
+
+build:
+  # Whole-project compile including all test sources (fast structural gate).
+  command: "crate-mvn test-compile"
+  # Full unit-test suite across every module (the pass/fail gate).
+  test_command: "crate-mvn test"
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 200000
+  command_timeout: 3600
+  max_build_test_retries: 4

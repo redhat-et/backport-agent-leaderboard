@@ -1,9 +1,15 @@
+# Run outputs — curated evidence is copied into results/runs/; raw output stays local
+jobs/
+jobs_*/
+output/
+logs/
+
+# Python
 __pycache__/
-*.egg-info/
+*.py[cod]
 .venv/
 .pytest_cache/
-config.yaml
-logs/
-projects/
-diffs/
-results/
+*.egg-info/
+
+# OS
+.DS_Store

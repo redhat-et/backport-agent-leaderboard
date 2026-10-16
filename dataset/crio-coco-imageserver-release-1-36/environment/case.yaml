@@ -1,0 +1,59 @@
+issue_id: "crio-coco-imageserver-9907"
+bug_description: >
+  Backport PR #9907 (CoCO confidential-container image-server support) to
+  cri-o release-1.36. Introduces ImageServiceManager/RuntimeServiceManager
+  in internal/storage, changes GetImageService/GetRuntimeService to return
+  errors, passes the runtime handler to image/runtime services, and threads
+  the ImageServer interface through pullArguments. The mainline code keys
+  service caches per SandboxInfo and targets a rewritten ociartifact
+  datastore, neither of which exists on release-1.36 -- adapt the feature to
+  the 1.36 codebase (runtime-handler-keyed caches, datastore methods
+  re-implemented against the existing Store without adopting main's
+  libartifact rewrite; leave PullData/EnforceConfigMediaType and the seccomp
+  OCI-artifact feature untouched), and port the PR's unit tests so they
+  compile against the adapted API. Completion bar: the full build and full
+  short unit-test suite must pass on the backported tree. Do NOT dismiss
+  failing tests as pre-existing environmental failures -- a correct backport
+  makes the whole suite pass on release-1.36; investigate and fix every
+  failure.
+
+repository:
+  source_path: /workspace/project
+  workdir: /workspace/workdir
+
+branches:
+  source: origin/main
+  target: target
+
+fix:
+  commit: "d92e5f44567e2f55a40de7f3b628e88e23573797"
+
+build:
+  # FULL-tree build (every package except the bats/e2e dirs): the feature
+  # changes GetImageService/GetRuntimeService to return errors, which
+  # propagates through every caller, so a whole-tree compile is the gate.
+  # Vendor mode keeps it hermetic (PR touches no go.mod/vendor files).
+  command: >-
+    GOTOOLCHAIN=local go build -mod=vendor
+    -tags "containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper"
+    $(GOTOOLCHAIN=local go list -mod=vendor
+    -tags "containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper"
+    ./... | grep -v /test | grep -v nsmgr/test)
+  # FULL unit-test suite (short mode) across all packages. The ported
+  # *_test.go files (image_mgr_test.go, runtime_mgr_test.go) run as part of
+  # this and are existence-checked by tests/test.sh.
+  test_command: >-
+    GOTOOLCHAIN=local go test -mod=vendor -short -count=1
+    -tags "test containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper"
+    $(GOTOOLCHAIN=local go list -mod=vendor
+    -tags "test containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper"
+    ./... | grep -v /test | grep -v nsmgr/test)
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 262144
+  command_timeout: 3600
+  max_build_test_retries: 10
+  max_resolution_retries: 5
