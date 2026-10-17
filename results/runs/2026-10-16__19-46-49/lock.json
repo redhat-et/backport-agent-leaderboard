@@ -1,0 +1,65 @@
+{
+    "schema_version": 3,
+    "created_at": "2026-10-17T02:46:49.984920Z",
+    "harbor": {
+        "version": "0.23.0",
+        "is_editable": false
+    },
+    "n_concurrent_trials": 4,
+    "retry": {
+        "max_retries": 0,
+        "exclude_exceptions": [
+            "AgentTimeoutError",
+            "AgentSafetyRefusalError",
+            "RewardFileEmptyError",
+            "ModelNotFoundError",
+            "RewardFileNotFoundError",
+            "VerifierOutputParseError",
+            "AgentAuthenticationError",
+            "VerifierTimeoutError",
+            "ApiUsageLimitError"
+        ],
+        "wait_multiplier": 1.0,
+        "min_wait_sec": 1.0,
+        "max_wait_sec": 60.0
+    },
+    "trials": [
+        {
+            "schema_version": 2,
+            "task": {
+                "name": "expat-cve-2025-59375-c8s",
+                "type": "local",
+                "digest": "sha256:03a10dcd79e9df40bd02b0b9d98cb576da54b143965fe8c9868d67371e30ec73",
+                "source": "dataset",
+                "path": "dataset/expat-cve-2025-59375-c8s"
+            },
+            "install_only": false,
+            "timeout_multiplier": 1.0,
+            "agent": {
+                "name": "amalgamator_tasks.amalgamator:Amalgamator",
+                "model_name": "openai/rits/zai-org/glm-5-3",
+                "skills": [],
+                "resume_trajectory": false,
+                "extra_allowed_hosts": [],
+                "kwargs": {},
+                "mcp_servers": []
+            },
+            "bridge_inputs": {},
+            "skills": [],
+            "environment": {
+                "type": "docker",
+                "force_build": false,
+                "delete": true,
+                "cpu_enforcement_policy": "auto",
+                "memory_enforcement_policy": "auto",
+                "extra_docker_compose": [],
+                "kwargs": {},
+                "extra_allowed_hosts": []
+            },
+            "verifier": {
+                "disable": false,
+                "environment_mode": "shared"
+            }
+        }
+    ]
+}

@@ -113,6 +113,12 @@ readable by the agent under test.
   by-SHA fetch); golden is a cherry-pick oracle, not the human diff.
 - expat: origin remote still present in the Dockerfiles (points at the exercise repo with
   finished fixes) — `git remote remove origin` hardening pending.
+- expat c8s: `%prep` is non-idempotent (the downstream CVE-2023-52425 patch creates
+  `testdata/largefiles/*` outside `%setup`'s cleanup), so the canonical build command is
+  stateful — re-running it on an already-prepped tree fails. A human backporter never
+  hits this; agents that end with a successful build do. Cost us 4 reward-0 runs before
+  diagnosis — see [`results/README.md`](../results/README.md). Fix pending: self-cleaning
+  build command (`rm -rf <builddir> && …`).
 - cri-o CoCo 1.36: golden is an amalgamator-produced patch, not a human backport.
 - crate: `AzureCopyIntegrationTest` (OpenDAL native lib, x64-only) fails under arm64 Docker —
   environment decision pending (amd64 emulation vs x86 host).

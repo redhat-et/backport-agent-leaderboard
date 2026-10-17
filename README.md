@@ -79,9 +79,11 @@ Full logs: [`results/runs/`](results/runs/).
 |---|---|---|---|---|---|---|
 | `expat-cve-2025-59375-c10s` | GLM 5.3 | **1.0** | 2h20m | 605 | 55.7M | [`runs/2026-10-15__15-13-28`](results/runs/2026-10-15__15-13-28/) |
 | `expat-cve-2025-59375-c9s` | GLM 5.3 | **1.0** | 2h33m | 611 | 43.1M | [`runs/2026-10-15__18-50-25`](results/runs/2026-10-15__18-50-25/) |
+| `expat-cve-2025-59375-c8s` | GLM 5.3 | 0.0 | 3h21m | — | ~76M | [`runs/2026-10-16__19-46-49`](results/runs/2026-10-16__19-46-49/) |
 
-2 of 31 cases attempted, both passed. Per-run notes and the leaderboard format:
-[`results/README.md`](results/README.md).
+3 of 31 cases attempted, 2 passed. The c8s failure is a task/harness failure, not a model
+failure — the agent's backport was discarded by the evaluation plumbing every attempt;
+see the full write-up in [`results/README.md`](results/README.md).
 
 ## Repository layout
 
