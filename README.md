@@ -75,15 +75,25 @@ Full logs: [`results/runs/`](results/runs/).
 
 ## Results so far
 
+**28 of 31 cases scored — 28/28 = 100% pass rate** (3 crate tasks still running).
+
+| Family | Tasks | Passed | Model |
+|---|---:|---:|---|
+| expat (CVE-2025-59375) | 3 | **3** ✅ | GLM 5.3 |
+| cri-o | 10 | **10** ✅ | GLM 5.3 |
+| django | 9 | **9** ✅ | GLM 5.3 |
+| crate | 9 | **6** 🔄 | GLM 5.3 |
+
+### expat detail
+
 | Task | Model | Reward | Time | Calls | Tokens | Full log |
 |---|---|---|---|---|---|---|
 | `expat-cve-2025-59375-c10s` | GLM 5.3 | **1.0** | 2h20m | 605 | 55.7M | [`runs/2026-10-15__15-13-28`](results/runs/2026-10-15__15-13-28/) |
 | `expat-cve-2025-59375-c9s` | GLM 5.3 | **1.0** | 2h33m | 611 | 43.1M | [`runs/2026-10-15__18-50-25`](results/runs/2026-10-15__18-50-25/) |
-| `expat-cve-2025-59375-c8s` | GLM 5.3 | 0.0 | 3h21m | — | ~76M | [`runs/2026-10-16__19-46-49`](results/runs/2026-10-16__19-46-49/) |
+| `expat-cve-2025-59375-c8s` | GLM 5.3 | **1.0** | 4h07m | — | ~120M | `eval-runs/c8s-exp6-local-2026-10-18/` |
 
-3 of 31 cases attempted, 2 passed. The c8s failure is a task/harness failure, not a model
-failure — the agent's backport was discarded by the evaluation plumbing every attempt;
-see the full write-up in [`results/README.md`](results/README.md).
+c8s required a fix to the Amalgamator pipeline (frozen-baseline patch export, [PR #53](https://github.com/amalgamator-ai/amalgamator/pull/53))
+before the model's correct backport reached the verifier. Full details in [`results/README.md`](results/README.md).
 
 ## Repository layout
 
