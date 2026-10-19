@@ -1,0 +1,1 @@
+Backport the fix "[1.2.X]  Fixed a security issue in the CSRF componenent.  Disclosure and new release forthcoming." (commit 818e7034, branch 'source') onto branch 'target' so that the project's complete test suite passes.

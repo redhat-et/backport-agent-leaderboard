@@ -1,0 +1,101 @@
+diff --git a/django/contrib/auth/middleware.py b/django/contrib/auth/middleware.py
+index df616a92435..1ca2b506568 100644
+--- a/django/contrib/auth/middleware.py
++++ b/django/contrib/auth/middleware.py
+@@ -1,4 +1,5 @@
+ from django.contrib import auth
++from django.contrib.auth.backends import RemoteUserBackend
+ from django.core.exceptions import ImproperlyConfigured
+ from django.utils.functional import SimpleLazyObject
+ 
+@@ -47,9 +48,11 @@ class RemoteUserMiddleware(object):
+         try:
+             username = request.META[self.header]
+         except KeyError:
+-            # If specified header doesn't exist then return (leaving
+-            # request.user set to AnonymousUser by the
+-            # AuthenticationMiddleware).
++            # If specified header doesn't exist then remove any existing
++            # authenticated remote-user, or return (leaving request.user set to
++            # AnonymousUser by the AuthenticationMiddleware).
++            if request.user.is_authenticated():
++                self._remove_invalid_user(request)
+             return
+         # If the user is already authenticated and that user is the user we are
+         # getting passed in the headers, then the correct user is already
+@@ -57,6 +60,11 @@ class RemoteUserMiddleware(object):
+         if request.user.is_authenticated():
+             if request.user.username == self.clean_username(username, request):
+                 return
++            else:
++                # An authenticated user is associated with the request, but
++                # it does not match the authorized user in the header.
++                self._remove_invalid_user(request)
++
+         # We are seeing this user for the first time in this session, attempt
+         # to authenticate the user.
+         user = auth.authenticate(remote_user=username)
+@@ -78,3 +86,17 @@ class RemoteUserMiddleware(object):
+         except AttributeError: # Backend has no clean_username method.
+             pass
+         return username
++
++    def _remove_invalid_user(self, request):
++        """
++        Removes the current authenticated user in the request which is invalid
++        but only if the user is authenticated via the RemoteUserBackend.
++        """
++        try:
++            stored_backend = auth.load_backend(request.session.get(auth.BACKEND_SESSION_KEY, ''))
++        except ImproperlyConfigured:
++            # backend failed to load
++            auth.logout(request)
++        else:
++            if isinstance(stored_backend, RemoteUserBackend):
++                auth.logout(request)
+diff --git a/django/contrib/auth/tests/remote_user.py b/django/contrib/auth/tests/remote_user.py
+index fa324781d27..d656b0ba8fb 100644
+--- a/django/contrib/auth/tests/remote_user.py
++++ b/django/contrib/auth/tests/remote_user.py
+@@ -95,6 +95,24 @@ class RemoteUserTest(TestCase):
+         response = self.client.get('/remote_user/', REMOTE_USER=self.known_user)
+         self.assertEqual(default_login, response.context['user'].last_login)
+ 
++    def test_user_switch_forces_new_login(self):
++        """
++        Tests that if the username in the header changes between requests
++        that the original user is logged out
++        """
++        User.objects.create(username='knownuser')
++        # Known user authenticates
++        response = self.client.get('/remote_user/',
++                                   **{'REMOTE_USER': self.known_user})
++        self.assertEqual(response.context['user'].username, 'knownuser')
++        # During the session, the REMOTE_USER changes to a different user.
++        response = self.client.get('/remote_user/',
++                                   **{'REMOTE_USER': "newnewuser"})
++        # Ensure that the current user is not the prior remote_user
++        # In backends that create a new user, username is "newnewuser"
++        # In backends that do not create new users, it is '' (anonymous user)
++        self.assertNotEqual(response.context['user'].username, 'knownuser')
++
+     def tearDown(self):
+         """Restores settings to avoid breaking other tests."""
+         settings.MIDDLEWARE_CLASSES = self.curr_middleware
+diff --git a/docs/releases/1.4.14.txt b/docs/releases/1.4.14.txt
+index 6c140ee6dc1..811c3f67eaa 100644
+--- a/docs/releases/1.4.14.txt
++++ b/docs/releases/1.4.14.txt
+@@ -38,3 +38,12 @@ if a file with the uploaded name already exists.
+ underscore plus a random 7 character alphanumeric string (e.g. ``"_x3a1gho"``),
+ rather than iterating through an underscore followed by a number (e.g. ``"_1"``,
+ ``"_2"``, etc.).
++
++``RemoteUserMiddleware`` session hijacking
++==========================================
++
++When using the :class:`~django.contrib.auth.middleware.RemoteUserMiddleware`
++and the ``RemoteUserBackend``, a change to the ``REMOTE_USER`` header between
++requests without an intervening logout could result in the prior user's session
++being co-opted by the subsequent user. The middleware now logs the user out on
++a failed login attempt.

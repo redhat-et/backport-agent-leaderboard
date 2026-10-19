@@ -9,15 +9,57 @@ in when curated.
 
 | Pipeline | Model (endpoint) | Attempted | Passed | Pass rate |
 |---|---|---:|---:|---:|
-| Amalgamator | GLM 5.3 (`openai/rits/zai-org/glm-5-3` via EnMaaS) | 3 / 31 | 2 | 67% |
+| Amalgamator | GLM 5.3 (`openai/rits/zai-org/glm-5-3` via EnMaaS) | 28 / 31 | 28 | 100% (28 scored) |
 
-Runs to date (details below):
+_3 tasks still running (crate ×2 in flight, ×1 verifier timeout — pending rerun)._
+
+### expat ×3 (CVE-2025-59375) — 3/3 ✅
 
 | Task | Tier | Reward | Wall time | Model calls | Tokens | Run log |
 |---|---|---|---|---|---|---|
 | `expat-cve-2025-59375-c10s` | Medium | **1.0** | 2h20m | 605 | ~55.7M | [`runs/2026-10-15__15-13-28`](runs/2026-10-15__15-13-28/) |
 | `expat-cve-2025-59375-c9s` | Hard | **1.0** | 2h33m | 611 | ~43.1M | [`runs/2026-10-15__18-50-25`](runs/2026-10-15__18-50-25/) |
-| `expat-cve-2025-59375-c8s` | Extreme | 0.0 | 3h21m | — | ~76M/attempt | [`runs/2026-10-16__19-46-49`](runs/2026-10-16__19-46-49/) (attempt 4) |
+| `expat-cve-2025-59375-c8s` | Extreme | **1.0** | 4h07m | — | ~120M | `eval-runs/c8s-exp6-local-2026-10-18/` (attempt 6, with frozen-baseline fix) |
+
+### cri-o ×10 — 10/10 ✅
+
+| Task | Reward | Run log |
+|---|---|---|
+| `crio-coco-imageserver-release-1` | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+| `crio-fix-deadlock-when-the-conta` (×2) | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+| `crio-hack-build-rpms-sh-update-r` | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+| `crio-highperformancehooks-fix-ir` | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+| `crio-ocpbugs-62150-server-ignore` | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+| `crio-runtimehandlerhooks-save-wh` (×2) | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+| `crio-server-run-post-stop-hooks` (×2) | **1.0** | `eval-runs/glm-crio-2026-10-17/` |
+
+### django ×9 — 9/9 ✅
+
+| Task | Reward | Run log |
+|---|---|---|
+| `django-adminurlfieldwidget-autoe` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-csrf-security-11x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-cve-2018-7537-18x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-cve-2022-28346-22x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-cve-2022-28346-40x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-cve-2023-24580-32x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-duplicate-filenames-uploa` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-password-reset-fix` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+| `django-remoteuser-logout-14x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
+
+### crate ×9 — 6/9 (3 pending) 🔄
+
+| Task | Reward | Run log |
+|---|---|---|
+| `crate-account-for-direct-buffers` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
+| `crate-ensure-that-joingraph-adds` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
+| `crate-fix-error-handling-on-inse` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
+| `crate-fix-partition-by-cols-not` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
+| `crate-preserve-detailedquery-in` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
+| `crate-return-0-instead-of-null` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
+| `crate-fix-replication-from-trans` | ⏳ verifier timeout — rerun needed | — |
+| `crate-fix-memory-based-pause-res` | 🔄 running | — |
+| `crate-fix-a-race-condition-swall` | 🔄 running | — |
 
 ## Reading a run directory
 
@@ -53,7 +95,16 @@ the tree green in ~40 min. Route: downstream patch
 `expat-2.5.0-CVE-2025-59375.patch` — matching the human golden (`2d0719b`). Job
 `2026-10-15__18-50-25`, trial `__F7CKvCw`.
 
-### `expat-cve-2025-59375-c8s` — GLM 5.3, reward 0.0 (2026-10-16, attempt 4 of 4)
+### `expat-cve-2025-59375-c8s` — GLM 5.3, reward 1.0 (2026-10-18, attempt 6) ✅
+
+**Previously failing (attempts 1–4, reward 0.0).** Root cause was in the Amalgamator
+pipeline — see the note below for the full history. With the frozen-baseline fix (PR #53
+in amalgamator-ai/amalgamator) the pipeline correctly emitted the candidate patch and the
+verifier scored it 1.0. Archive: `eval-runs/c8s-exp6-local-2026-10-18/`.
+
+---
+
+### `expat-cve-2025-59375-c8s` — history: attempts 1–4, reward 0.0 (2026-10-16)
 
 **Not a model failure — a task/harness failure.** The model solved the backport in every
 attempt; the evaluation plumbing discarded the solution every time.

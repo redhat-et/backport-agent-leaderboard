@@ -1,50 +1,66 @@
-# Prebuilt Python 2.7 (Django 1.4.x's framework code, e.g.
-# `except ImportError, e:` in django/conf/__init__.py, is Python-2-only --
-# not just this fix's test-runner print statement). Copied in below instead
-# of compiled from source: compiling from source blew past Harbor's
-# environment-start timeout (~10 min).
-FROM python:2.7.18-slim AS python2
+# Prebuilt Python 2.7: this target branch's Django is Python-2-only syntax
+# (`except ImportError, e:` etc.). Copied in below instead of compiled from
+# source -- compiling blew past Harbor's ~10 min environment timeout, and
+# python:2.7.18-slim's own base OS (buster) has archived apt repos, so the
+# image is ubuntu:24.04 + the prebuilt interpreter.
+FROM python:2.7.18-slim AS python
 
 FROM ubuntu:24.04
 
 WORKDIR /workspace
 
+# UTF-8 locale: under the default C locale, Python 2.7's filesystem
+# encoding is ascii, and the suite's unicode-filename tests die inside
+# os.stat() with UnicodeEncodeError. C.UTF-8 ships with ubuntu (no
+# locale-gen needed).
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+
 COPY case.yaml /workspace
 
-RUN apt-get update && apt-get install -y curl wget git yq
+# yq parses case.yaml (tests + solution); python3/pip3 (ubuntu's 3.12) are
+# for the harbor adapter's amalgamator install (amalgamator needs >= 3.12).
+# tzdata-legacy: the tzinfo tests set TZ=US/Eastern themselves, and since
+# 23.10 ubuntu splits the legacy zone names (US/*, ...) out of the main
+# tzdata package -- without it glibc silently falls back to UTC with an
+# empty tzname and test_16899 fails.
+RUN apt-get update && apt-get install -y curl wget git yq python3 python3-pip tzdata-legacy
 
-# Everything above this stays the same for each task, everything below will change
+# Copy in the prebuilt Python 2.7 interpreter. The image's unversioned
+# `python`/`pip` resolve to 2.7; `python3`/`pip3` stay ubuntu's 3.12.
+COPY --from=python /usr/local /usr/local
+# The interpreter's _hashlib (hashlib.sha256/md5, which Django's password
+# hashers need) is linked against libssl.so.1.1 / libcrypto.so.1.1, which
+# ubuntu:24.04 doesn't ship (it's on OpenSSL 3.x). Grab the matching 1.1
+# libs from the same python2 stage's base OS.
+COPY --from=python /usr/lib/*/libssl.so.1.1 /usr/lib/*/libcrypto.so.1.1 /usr/lib/
+# Era sqlite for the suite (same rationale as the py3 profile's
+# /opt/era-sqlite note: ubuntu:24.04's 3.45 normalizes PRAGMA table_info's
+# declared types to canonical case, and the 1.8 target's inspectdb tests
+# key on the declared casing).
+COPY --from=python /usr/lib/*/libsqlite3.so.0 /opt/era-sqlite/
+RUN ldconfig && LD_LIBRARY_PATH=/opt/era-sqlite python2.7 -c "import hashlib, sqlite3, ssl; hashlib.sha256('x'); assert sqlite3.sqlite_version_info < (3, 40), sqlite3.sqlite_version; print('python2.7 + hashlib + sqlite3 ' + sqlite3.sqlite_version + ' + ssl OK')"
 
-# Install python - this step will vary by rep
-RUN apt-get install -y python3 python3-pip
 
-# Ubuntu 24.04 dropped python2 from its repos entirely. Copy in the
-# prebuilt interpreter from the python2 stage above (see comment at top of
-# file) instead of compiling from source.
-COPY --from=python2 /usr/local /usr/local
-# The interpreter's _hashlib (and hence hashlib.sha256/md5/etc, which
-# Django's own password hashers need) is linked against libssl.so.1.1 /
-# libcrypto.so.1.1, which ubuntu:24.04 doesn't ship (it's on OpenSSL 3.x).
-# Grab the matching 1.1 libs from the same python2 stage's base OS.
-COPY --from=python2 /usr/lib/*/libssl.so.1.1 /usr/lib/*/libcrypto.so.1.1 /usr/lib/
-RUN ldconfig && python2.7 -c "import hashlib; hashlib.sha256('x'); print('python2.7 + hashlib OK')"
 
-# Clone the django repo
-RUN git clone https://github.com/django/django.git /workspace/django
 
 # Amalgamator (and solve.sh) need a git identity to commit cherry-picks.
 RUN git config --global user.email "amalgamator-bench@redhat.com" && \
     git config --global user.name "Amalgamator Bench"
 
-# The original target branch for this case, stable/1.4.x, no longer exists on
-# django/django (it was deleted years ago after EOL). The known-good backport
-# commit (92d3430f) is still reachable in history via later 1.4.x tags, so we
-# recreate "target" as a local branch pointing at that backport commit's
-# parent -- i.e. the exact pre-fix state the backport commit was applied to.
-# This mirrors how the real benchmark harness (backport-agent-leaderboard)
-# derives its target branch: always backport_sha^, never a branch name.
-RUN cd /workspace/django && \
-    git branch target 92d3430f12171f16f566c9050c40feefb830a4a3^
+# Shallow, by-SHA fetch of only the two commits this case needs. The human
+# backport (92d3430f) is a child of target and is never fetched, so it is
+# not discoverable in the container (no `git log --all`, no remote to fetch
+# from once the remote is removed below).
+#   source = 9305c0e1   original fix (on main)
+#   target = 73991b0b   pre-backport tip of stable/1.4.x
+# Depths are exact: both histories bottom out at the fix<->target merge
+# base (658ca67d), which Amalgamator's phase-0 `git merge-base source target`
+# requires to connect.
+RUN git init -q /workspace/django && cd /workspace/django && \
+    git remote add origin https://github.com/django/django.git && \
+    git fetch -q --depth=1303 origin 9305c0e12d43c4df999c3301a1f0c742264a657e && git branch source FETCH_HEAD && \
+    git fetch -q --depth=138 origin 73991b0b325f07fc62179c3684ed921f141e69ce && git branch target FETCH_HEAD && \
+    git checkout -q target && \
+    git remote remove origin
 
-# Make the working directory
 RUN mkdir /tmp/amalgamator-django

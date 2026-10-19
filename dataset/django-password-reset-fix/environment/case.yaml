@@ -1,38 +1,51 @@
 issue_id: "django-password-reset-fix"
 bug_description: >
-  Backport security fix for password resets from main to stable/1.4.x.
+  Backport the fix "Fixed a security issue related to password resets" (commit 9305c0e1, branch 'source') onto branch
+  'target' so that the project's complete test suite passes.
 
 repository:
   source_path: /workspace/django
   workdir: /tmp/amalgamator-django
 
 branches:
-  source: origin/main
+  source: source
   target: target
 
 fix:
   commit: "9305c0e12d43c4df999c3301a1f0c742264a657e"
 
 build:
+  # Django is pure Python: there is no build step, the test runner imports
+  # and byte-compiles the tree.
   command: ""
-  # Django 1.4.x's own framework code (not just this fix) is Python-2-only
-  # syntax (see environment/Dockerfile). python2.7 is built from source
-  # there specifically to run this.
-  # - PYTHONPATH=.. : runtests.py does `from django import contrib` at
-  #   import time with no path setup of its own; it needs the repo root
-  #   (one level up from tests/) on the path.
-  # - --settings=test_sqlite : tests/test_sqlite.py is the repo's own
-  #   ready-made settings module for running the suite locally.
-  # - `auth` : scope to the module the fix actually touches. Confirmed via
-  #   baseline run: unscoped/full suite needs services (memcached, GIS,
-  #   etc.) this minimal container doesn't have, which is unrelated noise.
-  #   Baseline (no patch) on just `auth`: 135/135 pass, clean signal.
-  test_command: "cd tests && PYTHONPATH=.. python2.7 runtests.py --settings=test_sqlite auth"
+  # The project's own runner over the complete suite -- never module-scoped.
+  # GIS tests are only included by the runner when the settings use spatial
+  # backends (sqlite never does), and with no CACHES defined the cache tests
+  # run on LocMemCache. LD_LIBRARY_PATH points the interpreter's _sqlite3
+  # at the era-correct libsqlite3 shipped in /opt/era-sqlite (modern sqlite
+  # normalizes PRAGMA type casing and breaks the inspectdb tests; see the
+  # Dockerfile). On py2 the command first compileall's the tree: py2's
+  # import path ignores a PEP 263 cookie on line 2 when line 1 is a
+  # docstring, which otherwise kills the jslex.py import on a fresh
+  # checkout (string-based compilation and the .pyc it leaves behind are
+  # unaffected). On py3 profiles and the 1.8 target the suite runs as the
+  # unprivileged djangotests user (tests assert unreadable files stay
+  # unreadable, which never happens as root), after chowning the root-built
+  # worktree. The 1.4 commands prepend an /etc/hosts pin (www.example.com
+  # -> 127.0.0.2): its deprecated verify_exists tests expect that host to
+  # be a broken link (true in 2012, 200 today) while a sibling test
+  # fetches google.com and must succeed, so the suite can't run offline
+  # -- the pin restores the 2012 answer without touching the network.
+  # PYTHONPATH: runtests.py imports `django` from the repo root,
+  # one level up from tests/ -- plus, on 1.1.X only, /workspace, where the
+  # image-provided settings module lives (that branch predates
+  # tests/test_sqlite.py).
+  test_command: "grep -q www.example.com /etc/hosts || echo '127.0.0.2 www.example.com' >> /etc/hosts; python2.7 -m compileall -q django tests && cd tests && env LD_LIBRARY_PATH=/opt/era-sqlite PYTHONPATH=.. python2.7 runtests.py --settings=test_sqlite"
 
 model: "openai/your-model-here"
 api_base: "https://your-endpoint.com/v1"
 
 advanced:
-  context_length: 131072
-  command_timeout: 600
+  context_length: 200000
+  command_timeout: 3600
   max_build_test_retries: 5

@@ -1,0 +1,1 @@
+Backport the fix "Fixed #23066 -- Modified RemoteUserMiddleware to logout on REMOTE_USER change." (commit 5307ce56, branch 'source') onto branch 'target' so that the project's complete test suite passes.

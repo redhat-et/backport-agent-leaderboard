@@ -14,7 +14,7 @@ email = "supathak@redhat.com"
 
 [[tasks]]
 name = "redhat-et/django-password-reset-fix"
-digest = "sha256:991052f73f7bf3b7f0c5301add14ded8d988371b6d56d8c5c286cd894b91c1b2"
+digest = "sha256:68b38a1669afc73bc01b708b99ac0c5ab4a3bfc632f5d1e6e6fb6c91ad100ce2"
 
 [[tasks]]
 name = "redhat-et/crio-coco-imageserver-release-1-36"
@@ -31,4 +31,72 @@ digest = "sha256:0a0dffd327a3e8fc09ee3255e2df18f9f98ef5e5f358e21c3c980e5850db90c
 [[tasks]]
 name = "redhat-et/expat-cve-2025-59375-c10s"
 digest = "sha256:e3491439dd4b4dceadd41642e42413d614079eaf87f602ed97314962b904743c"
+
+[[tasks]]
+name = "redhat-et/crate-account-for-direct-buffers-when-constructing"
+digest = "sha256:e11e4c4f927e2f066129f497193681333ab4f777106896e96c35784579a58cad"
+
+[[tasks]]
+name = "redhat-et/crate-ensure-that-joingraph-adds-only-edges"
+digest = "sha256:2748eb23e9c17c09885bbf266ecebe74b6c4669eed993620c945a218f7f1fd35"
+
+[[tasks]]
+name = "redhat-et/crate-fix-a-race-condition-swallowing-pgwire"
+digest = "sha256:4b3e78b76ecd78c6766feff1e383c634ae8cc25dd0fde3873b2a73a8028279ef"
+
+[[tasks]]
+name = "redhat-et/crate-fix-error-handling-on-insert"
+digest = "sha256:67737c43aa4f3b7a3ac783ed85f1da8ff4c3ac8556e3c8eab92bd8c0d84a23da"
+
+[[tasks]]
+name = "redhat-et/crate-fix-memory-based-pause-resume"
+digest = "sha256:a8462a8e69cbb4eb693a8a9b87c7d2522431bcbe612799a01556d104e37f323f"
+
+[[tasks]]
+name = "redhat-et/crate-fix-partition-by-cols-not"
+digest = "sha256:beb73367f20b69bbda2c3b06e7d2d6a3d562aa1505b9ed95f3a34856d6ced826"
+
+[[tasks]]
+name = "redhat-et/crate-fix-replication-from-translog-for-integral"
+digest = "sha256:cd99fd780130c7a4b06f1ed58948bcb665ccbe885888542962a199ef51a04e5f"
+
+[[tasks]]
+name = "redhat-et/crate-preserve-detailedquery-in-collect-on-prune"
+digest = "sha256:de1e50356c2e19b2ce293a6ccf4db4b70d971bc000168b94f175272a0c98688a"
+
+[[tasks]]
+name = "redhat-et/crate-return-0-instead-of-null"
+digest = "sha256:fe55630282e12a0866196adb6654b94266a0051786e04f1d6033ee0a1631a309"
+
+[[tasks]]
+name = "redhat-et/django-adminurlfieldwidget-autoescape-15x"
+digest = "sha256:72f4dc7f3443d8edd0a24b4ffa93480b3fe26ad71ea1168fc6b69b0938262639"
+
+[[tasks]]
+name = "redhat-et/django-csrf-security-11x"
+digest = "sha256:cd3caf4a930006289559b6c9b76215a087423038df4e75383bd335ae83b86f9e"
+
+[[tasks]]
+name = "redhat-et/django-cve-2018-7537-18x"
+digest = "sha256:275c275da66c0d9759dfd8cef6036ba12733c7244983bd8d6f04d0c8be5f9b5b"
+
+[[tasks]]
+name = "redhat-et/django-cve-2022-28346-22x"
+digest = "sha256:1da2beae0de89a534191a637b0f572a5cf634c5f347c65d59454c4db6b74c1e9"
+
+[[tasks]]
+name = "redhat-et/django-cve-2022-28346-40x"
+digest = "sha256:85c7f2f49d12db9a9fe4b615c50537128619fc6dfc16b14fa34e90a3e3ab4534"
+
+[[tasks]]
+name = "redhat-et/django-cve-2023-24580-32x"
+digest = "sha256:4e5d6cfa04ce0131573fab59d412d1425691bae3cb708b91bfc2175e7eb8a97f"
+
+[[tasks]]
+name = "redhat-et/django-duplicate-filenames-upload-15x"
+digest = "sha256:6ceaf42bd614e639d10786c6e6a43358c74d695e48be6afe12547ac1cf3d64cd"
+
+[[tasks]]
+name = "redhat-et/django-remoteuser-logout-14x"
+digest = "sha256:428ed3343619a745851a6922aa220756db795a0c1048fd022467871bb5454c32"
 

@@ -1,0 +1,115 @@
+diff --git a/django/contrib/csrf/middleware.py b/django/contrib/csrf/middleware.py
+index 40cbcf502b0..db5173dcefb 100644
+--- a/django/contrib/csrf/middleware.py
++++ b/django/contrib/csrf/middleware.py
+@@ -37,9 +37,6 @@ class CsrfViewMiddleware(object):
+             if getattr(callback, 'csrf_exempt', False):
+                 return None
+ 
+-            if request.is_ajax():
+-                return None
+-
+             try:
+                 session_id = request.COOKIES[settings.SESSION_COOKIE_NAME]
+             except KeyError:
+@@ -48,9 +45,12 @@ class CsrfViewMiddleware(object):
+ 
+             csrf_token = _make_token(session_id)
+             # check incoming token
+-            try:
+-                request_csrf_token = request.POST['csrfmiddlewaretoken']
+-            except KeyError:
++            request_csrf_token = request.POST.get('csrfmiddlewaretoken', '')
++            if request_csrf_token == "":
++                # Fall back to X-CSRFToken, to make things easier for AJAX
++                request_csrf_token = request.META.get('HTTP_X_CSRFTOKEN', '')
++
++            if request_csrf_token == "":
+                 return HttpResponseForbidden(_ERROR_MSG)
+ 
+             if request_csrf_token != csrf_token:
+diff --git a/django/contrib/csrf/tests.py b/django/contrib/csrf/tests.py
+index 2acda0b0c4a..429151eeae7 100644
+--- a/django/contrib/csrf/tests.py
++++ b/django/contrib/csrf/tests.py
+@@ -135,12 +135,12 @@ class CsrfMiddlewareTest(TestCase):
+         req2 = CsrfMiddleware().process_view(req, csrf_exempt(self.get_view()), (), {})
+         self.assertEquals(None, req2)
+ 
+-    def test_ajax_exemption(self):
++    def test_csrf_token_in_header(self):
+         """
+-        Check that AJAX requests are automatically exempted.
++        Check that we can pass in the token in a header instead of in the form
+         """
+         req = self._get_POST_session_request()
+-        req.META['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest'
++        req.META['HTTP_X_CSRFTOKEN'] = _make_token(self._session_id)
+         req2 = CsrfMiddleware().process_view(req, self.get_view(), (), {})
+         self.assertEquals(None, req2)
+ 
+diff --git a/docs/ref/contrib/csrf.txt b/docs/ref/contrib/csrf.txt
+index 9556f9a20ac..0c4b4006c2b 100644
+--- a/docs/ref/contrib/csrf.txt
++++ b/docs/ref/contrib/csrf.txt
+@@ -39,6 +39,34 @@ replaced instead of using ``CsrfMiddleware``.
+     (previous versions of Django did not provide these two components
+     of ``CsrfMiddleware`` as described above)
+ 
++AJAX
++----
++
++While the above method can be used with AJAX POST requests, it has some
++inconveniences: you have to remember to get the CSRF token from the HTML
++document and pass it in as POST data with every POST request. For this reason,
++there is an alternative method: on each XMLHttpRequest, set a custom
++`X-CSRFToken` header to the value of the CSRF token. This is often easier,
++because many javascript frameworks provide hooks that allow headers to be set on
++every request. In jQuery, you can use the ``beforeSend`` hook as follows:
++
++.. code-block:: javascript
++
++    $.ajaxSetup({
++        beforeSend: function(xhr, settings) {
++            if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
++                // Only send the token to relative URLs i.e. locally.
++                xhr.setRequestHeader("X-CSRFToken",
++                                     $("#csrfmiddlewaretoken").val());
++            }
++        }
++    });
++
++Adding this to a javascript file that is included on your site will ensure that
++AJAX POST requests that are made via jQuery will not be caught by the CSRF
++protection. This will only work if you remember to include a form on the page,
++so that the input with id 'csrfmiddlewaretoken' will be found.
++
+ Exceptions
+ ----------
+ 
+@@ -61,10 +89,6 @@ disable the view protection mechanism (``CsrfViewMiddleware``) and the
+ response post-processing (``CsrfResponseMiddleware``) respectively.
+ They can be used individually if required.
+ 
+-You don't have to worry about doing this for most AJAX views. Any
+-request sent with "X-Requested-With: XMLHttpRequest" is automatically
+-exempt. (See the next section.)
+-
+ How it works
+ ============
+ 
+@@ -98,14 +122,6 @@ The Content-Type is checked before modifying the response, and only
+ pages that are served as 'text/html' or 'application/xml+xhtml'
+ are modified.
+ 
+-The middleware tries to be smart about requests that come in via AJAX. Many
+-JavaScript toolkits send an "X-Requested-With: XMLHttpRequest" HTTP header;
+-these requests are detected and automatically *not* handled by this middleware.
+-We can do this safely because, in the context of a browser, the header can only
+-be added by using ``XMLHttpRequest``, and browsers already implement a
+-same-domain policy for ``XMLHttpRequest``. (Note that this is not secure if you
+-don't trust content within the same domain or subdomains.)
+-
+ 
+ .. _9.1.1 Safe Methods, HTTP 1.1, RFC 2616: http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
+ 

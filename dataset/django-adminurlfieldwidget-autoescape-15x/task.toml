@@ -1,0 +1,32 @@
+schema_version = "1.3"
+# /tmp/amalgamator-django: the patched worktree (final repo state after the
+#   agent's backport, whatever it ends up looking like).
+# /workspace/amalgamator/runs: Amalgamator's own run archive -- tracker
+#   JSONs, per-phase logs, the candidate diff, dossier.md. Harbor's own
+#   trial.log truncates long command output, so this is where the full
+#   per-phase record lives.
+artifacts = ["/tmp/amalgamator-django", "/workspace/amalgamator/runs", "/workspace/case.yaml"]
+
+[task]
+name = "redhat-et/django-adminurlfieldwidget-autoescape-15x"
+authors = [{ name = "Surya Prakash Pathak", email = "supathak@redhat.com" }]
+
+[metadata]
+difficulty = "hard"
+difficulty_explanation = """
+Hard django/django backport (similarity=0.99; file_overlap=0.33; size_ratio=1.00; orig_files=2; back_files=2).
+Original fix cbe6d556 on main -> human backport 90363e38 to stable/1.5.x.
+Golden = the real human backport diff. Verification = the project's complete
+test suite via `runtests.py --settings=test_sqlite` on python2.7.
+"""
+category = "programming"
+
+[verifier]
+timeout_sec = 3600.0
+
+[agent]
+timeout_sec = 18000.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 3600.0

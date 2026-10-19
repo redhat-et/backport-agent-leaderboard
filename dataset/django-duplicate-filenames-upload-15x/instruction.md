@@ -1,0 +1,1 @@
+Backport the fix "[1.6.x] Fixed #23157 -- Removed O(n) algorithm when uploading duplicate file names." (commit dd0c3f4e, branch 'source') onto branch 'target' so that the project's complete test suite passes.
