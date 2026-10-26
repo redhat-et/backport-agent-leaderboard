@@ -84,3 +84,49 @@ jobs/<timestamp>/<task>__<id>/
 ```
 
 Completed runs are curated into [`results/runs/`](../results/); `jobs/` itself is gitignored.
+
+## The exact gates: build and test commands per task
+
+These are the `build.command` / `build.test_command` gates from each task's
+`environment/case.yaml` — what the verifier runs to decide pass/fail. Per suite they
+are uniform; exceptions are called out. All are the project's **full** commands;
+nothing is scoped to the touched module.
+
+These are the exact gates from each task's `environment/case.yaml` (`build.command` / `build.test_command`). Per suite they are uniform — the exceptions are called out. All are the project's **full** commands; nothing is scoped to the touched module.
+
+**crate** (9 tasks) — run as the unprivileged `builder` user via the `crate-mvn` wrapper (`runuser` + `SHIPPABLE=true`):
+
+| Task | Build | Test |
+|---|---|---|
+| all 9 crate tasks | `crate-mvn test-compile` | `crate-mvn test` |
+
+**cri-o** (10 tasks) — vendored, short-mode Go suite; identical across tasks:
+
+| Task | Build | Test |
+|---|---|---|
+| 9 of 10 crio tasks | `GOTOOLCHAIN=local go build -mod=vendor -tags "…seccomp" $(go list ./… \| grep -v /test)` | `GOTOOLCHAIN=local go test -mod=vendor -short -count=1 -tags "test …seccomp" $(go list ./… \| grep -v /test)` |
+| `crio-coco-imageserver-release-1-36` | same, without the `seccomp` tag | same, without the `seccomp` tag |
+| `crio-hack-build-rpms-sh-update-release-1-29` | same as the 9 | same + `grep` checks on `hack/build-rpms.sh` (`dnf-command(builddep)`, `debug_package %{nil}`) and `bash -n` |
+
+**django** (9 tasks) — the project's own `runtests.py` under the era-appropriate interpreter (Python 2.7 for ≤1.11, Python 3.9 for ≥2.2); build command empty (compileall is folded into the test command):
+
+| Task | Test |
+|---|---|
+| `django-adminurlfieldwidget-autoescape-15x`, `django-duplicate-filenames-upload-15x` | `python2.7 -m compileall -q django tests && cd tests && python2.7 runtests.py --settings=test_sqlite` |
+| `django-password-reset-fix`, `django-remoteuser-logout-14x` | same, prefixed with an `/etc/hosts` pin for `www.example.com` |
+| `django-csrf-security-11x` | same, `--settings=dj11settings`, `PYTHONPATH=..:/workspace` |
+| `django-cve-2018-7537-18x` | same as 15x, run as the `djangotests` user via `runuser` |
+| `django-cve-2022-28346-22x`, `django-cve-2022-28346-40x`, `django-cve-2023-24580-32x` | `python3.9 runtests.py --settings=test_sqlite` as the `djangotests` user |
+
+(All django test invocations also set `LD_LIBRARY_PATH=/opt/era-sqlite` for the era-built SQLite.)
+
+**expat** (3 tasks, CentOS Stream dist-git via `centpkg`):
+
+| Task | Build | Test |
+|---|---|---|
+| `expat-cve-2025-59375-c8s` | `centpkg --name expat --namespace rpms --release c8s sources && centpkg … prep` | `centpkg --name expat --namespace rpms --release c8s local` |
+| `expat-cve-2025-59375-c9s` | same with `--release c9s` | same with `--release c9s` |
+| `expat-cve-2025-59375-c10s` | same with `--release c10s` | same with `--release c10s` |
+
+(`centpkg local` builds the rpm and runs the full `%check` test suite.)
+

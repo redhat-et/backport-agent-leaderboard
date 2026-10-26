@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import yaml
 
@@ -9,7 +10,7 @@ from harbor.models.agent.context import AgentContext
 
 _CASE_YAML_PATH = "/workspace/case.yaml"
 _AMALGAMATOR_INSTALL_DIR = "/workspace/amalgamator"
-_AMALGAMATOR_REPO_URL = "https://github.com/redhat-et/amalgamator.git"
+_AMALGAMATOR_REPO_URL = "https://github.com/amalgamator-ai/amalgamator.git"
 # The model-agnostic work (PRs #29-#32) is merged into `main`: LiteLLM
 # dispatch, the shared agent runner, and the named-profile registry all live
 # there now. The legacy inline `model`/`api_base` fields this adapter writes
@@ -39,6 +40,78 @@ class Amalgamator(BaseInstalledAgent):
    
     async def install(self, environment: BaseEnvironment):
         """Install the agent in the given environment."""
+        # LOCAL-EVAL OVERRIDE (uncommitted, eval-only; working copy backed up
+        # at /tmp/amalgamator.py.working-bak-20261018): when
+        # AMALGAMATOR_DEEPEN_SHALLOW is exported on the host as
+        # "<repo_path> <remote_url> <depth>", deepen the task repo's shallow
+        # clone in place so amalgamator's Phase 0 `git merge-base source
+        # target` can find the common ancestor (the crate Dockerfiles fetch
+        # source/target at --depth=50, but main and the release branches
+        # diverge 197-912 commits back, so the merge base is absent and the
+        # pipeline dies in <1s). Fetch is by URL with NO refspec and
+        # --no-tags: no refs are created, no tags are auto-followed, and
+        # --deepen only walks BACKWARD from existing shallow boundaries --
+        # the human backport (target's child) stays unfetchable, so this is
+        # leak-safe (validated: backport absent from the object store
+        # afterwards). NOT this form: `git remote add` + `git fetch
+        # <remote> --deepen` -- the default refspec fetches all branch tips
+        # and auto-follows tags, which leaks the golden backport via
+        # refs/tags/* (found 2026-10-18).
+        deepen_spec = os.environ.get("AMALGAMATOR_DEEPEN_SHALLOW")
+        if deepen_spec:
+            parts = deepen_spec.split()
+            if len(parts) != 3:
+                raise ValueError(
+                    "AMALGAMATOR_DEEPEN_SHALLOW must be '<repo_path> <remote_url> <depth>'"
+                )
+            repo_path, remote_url, depth = parts
+            deepen_command = (
+                f"cd {repo_path} && "
+                f"git fetch --no-tags --deepen={depth} {remote_url} && "
+                "git merge-base source target && echo 'deepen ok: merge-base present'"
+            )
+            await self.exec_as_root(
+                environment=environment,
+                command=deepen_command,
+            )
+        # ... and when AMALGAMATOR_LOCAL_TARBALL is exported on the host (a
+        # HOST PATH to a .tar.gz holding the top-level contents of an
+        # amalgamator checkout, no .git), upload that tarball into the
+        # container and install it instead of cloning GitHub main. Used to
+        # eval UNPUSHED amalgamator changes (the frozen-baseline fix)
+        # without touching the remote. Not set = normal GitHub clone,
+        # byte-identical to the backed-up behavior.
+        local_tarball = os.environ.get("AMALGAMATOR_LOCAL_TARBALL")
+        if local_tarball:
+            await environment.upload_file(
+                Path(local_tarball), "/tmp/amalgamator-local.tar.gz"
+            )
+            python_probe = (
+                'PY="$(command -v python3.12 || command -v python3)"'
+            )
+            # Extract with python's tarfile module, NOT /usr/bin/tar: GNU tar
+            # 1.35's extraction syscalls (the *at()/flag combinations it uses)
+            # return ENOSYS under Rosetta in linux/amd64 containers on Apple
+            # Silicon -- every mkdir/open fails with "Function not
+            # implemented" (bit the crate x9 eval 2026-10-18; arm64-native
+            # containers like django are unaffected). python tarfile goes
+            # through glibc's plain open/mkdir and works everywhere.
+            install_command = (
+                f"mkdir -p {_AMALGAMATOR_INSTALL_DIR} && "
+                f"{python_probe} && "
+                '"$PY" -c "import tarfile; t = tarfile.open(\'/tmp/amalgamator-local.tar.gz\'); '
+                f"t.extractall('{_AMALGAMATOR_INSTALL_DIR}', filter='data') "
+                'if hasattr(tarfile, \'data_filter\') else t.extractall(\''
+                f'{_AMALGAMATOR_INSTALL_DIR}\')" && '
+                f"rm -f /tmp/amalgamator-local.tar.gz && "
+                f"cd {_AMALGAMATOR_INSTALL_DIR} && "
+                '"$PY" -m pip install -e . --break-system-packages --ignore-requires-python --ignore-installed'
+            )
+            await self.exec_as_root(
+                environment=environment,
+                command=install_command,
+            )
+            return
         # amalgamator is a private/internal GitHub repo -- the container has
         # no credentials of its own, so an anonymous clone fails with
         # "could not read Username for 'https://github.com'". Pull a token
@@ -53,7 +126,7 @@ class Amalgamator(BaseInstalledAgent):
                 "GITHUB_TOKEN is not set on the host. amalgamator is a "
                 "private/internal repo, so cloning it inside the container "
                 "needs a token. Run `export GITHUB_TOKEN=$(gh auth token)` "
-                "(or set a PAT with read access to redhat-et/amalgamator) "
+                "(or set a PAT with read access to amalgamator-ai/amalgamator) "
                 "before `harbor run`."
             )
         clone_url = _AMALGAMATOR_REPO_URL.replace(
