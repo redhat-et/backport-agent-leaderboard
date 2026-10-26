@@ -1,0 +1,1 @@
+Backport the fix "HighPerformanceHooks: Fix IRQ SMP affinity race conditions" (commit 3dce7d85, branch 'source') onto branch 'target' (release-1.31) so that the project builds and its complete test suite passes. The source commit is the merge of upstream PR #9228.

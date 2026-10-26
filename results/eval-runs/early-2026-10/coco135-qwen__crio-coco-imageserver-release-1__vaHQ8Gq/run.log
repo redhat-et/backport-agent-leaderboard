@@ -1,0 +1,6 @@
+Skipping image OS validation for hb__8959f7342e19c8aa9b9f390133e0c8ed: docker inspect returned 1
+Running command: git clone --branch main --single-branch https://x-access-token:${GITHUB_TOKEN}@github.com/redhat-et/amalgamator.git /workspace/amalgamator && cd /workspace/amalgamator && pip3 install -e . --break-system-packages --ignore-requires-python
+Command outputs captured
+Running command: cat /workspace/case.yaml
+Command outputs captured
+Running command: cd /workspace/amalgamator && PYTHONPATH=. python3 -m auto_bug_fix.run_bug_fix /workspace/case.yaml

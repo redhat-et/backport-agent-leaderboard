@@ -1,0 +1,22 @@
+Early exploratory runs (2026-10-01..03), on earlier versions of the
+tasks (old tasks/ layout; crio-coco release-1-35/1-36, crio-pathtraversal,
+django-password-reset). These predate dataset hardening — not comparable
+to the final 31-task scoreboard. Format: label\tmodel\ttrial\treward
+
+coco136-glm	openai/rits/zai-org/glm-5-3	crio-coco-imageserver-release-1__PzNHmur	1
+coco136-luna	openai/gpt-6-luna	crio-coco-imageserver-release-1__eeNwYtQ	0
+coco136-qwen	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-coco-imageserver-release-1__ZAsooYm	0
+coco136-sol	openai/gpt-6.1-sol	crio-coco-imageserver-release-1__Zm9kJh3	0
+coco136-sol	openai/gpt-6.1-sol	crio-coco-imageserver-release-1__TPxJP7w	1
+coco136-sol2	openai/gpt-6.1-sol	crio-coco-imageserver-release-1__iG9P8Nt	1
+coco135-glm	openai/rits/zai-org/glm-5-3	crio-coco-imageserver-release-1__UDY85Zu	?
+coco135-glm	openai/rits/zai-org/glm-5-3	crio-coco-imageserver-release-1__DHLKPvE	?
+coco135-glm	openai/rits/zai-org/glm-5-3	crio-coco-imageserver-release-1__ZaBLvkW	1
+coco135-opus	openai/claude-opus-4-8	crio-coco-imageserver-release-1__Q7g72pW	0
+coco135-qwen	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-coco-imageserver-release-1__vaHQ8Gq	?
+coco135-qwen	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-coco-imageserver-release-1__9h2hTRP	?
+coco135-qwen	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-coco-imageserver-release-1__zDCXuYm	0
+coco135-qwen-rerun	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-coco-imageserver-release-1__UMz7byB	1
+pathtraversal-qwen	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-pathtraversal-release-1-30__t5mQsZ6	1
+pathtraversal-qwen-rerun	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	crio-pathtraversal-release-1-30__gGHHTkL	1
+django-passwordreset-qwen	openai/Inferact/Qwen3.8-Flash-Next-NVFP4	django-password-reset-fix__vAXcoAa	1

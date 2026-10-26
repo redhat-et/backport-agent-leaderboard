@@ -18,11 +18,11 @@ digest = "sha256:68b38a1669afc73bc01b708b99ac0c5ab4a3bfc632f5d1e6e6fb6c91ad100ce
 
 [[tasks]]
 name = "redhat-et/crio-coco-imageserver-release-1-36"
-digest = "sha256:4dea6e9798cbef18857d94ef3492d86fa76bd7406ac2c268392c946d763b4cd3"
+digest = "sha256:a948cf8be5fc20c8725c2449f89ef10f5aea623ddc9ea21dab9ba2ad564e09c6"
 
 [[tasks]]
 name = "redhat-et/expat-cve-2025-59375-c8s"
-digest = "sha256:8df9b9a4a183516c419b215d757611f90443746fedb0e0eabfbb3e549a004864"
+digest = "sha256:03a10dcd79e9df40bd02b0b9d98cb576da54b143965fe8c9868d67371e30ec73"
 
 [[tasks]]
 name = "redhat-et/expat-cve-2025-59375-c9s"
@@ -33,56 +33,8 @@ name = "redhat-et/expat-cve-2025-59375-c10s"
 digest = "sha256:e3491439dd4b4dceadd41642e42413d614079eaf87f602ed97314962b904743c"
 
 [[tasks]]
-name = "redhat-et/crate-account-for-direct-buffers-when-constructing"
-digest = "sha256:e11e4c4f927e2f066129f497193681333ab4f777106896e96c35784579a58cad"
-
-[[tasks]]
-name = "redhat-et/crate-ensure-that-joingraph-adds-only-edges"
-digest = "sha256:2748eb23e9c17c09885bbf266ecebe74b6c4669eed993620c945a218f7f1fd35"
-
-[[tasks]]
-name = "redhat-et/crate-fix-a-race-condition-swallowing-pgwire"
-digest = "sha256:4b3e78b76ecd78c6766feff1e383c634ae8cc25dd0fde3873b2a73a8028279ef"
-
-[[tasks]]
-name = "redhat-et/crate-fix-error-handling-on-insert"
-digest = "sha256:67737c43aa4f3b7a3ac783ed85f1da8ff4c3ac8556e3c8eab92bd8c0d84a23da"
-
-[[tasks]]
-name = "redhat-et/crate-fix-memory-based-pause-resume"
-digest = "sha256:a8462a8e69cbb4eb693a8a9b87c7d2522431bcbe612799a01556d104e37f323f"
-
-[[tasks]]
-name = "redhat-et/crate-fix-partition-by-cols-not"
-digest = "sha256:beb73367f20b69bbda2c3b06e7d2d6a3d562aa1505b9ed95f3a34856d6ced826"
-
-[[tasks]]
-name = "redhat-et/crate-fix-replication-from-translog-for-integral"
-digest = "sha256:cd99fd780130c7a4b06f1ed58948bcb665ccbe885888542962a199ef51a04e5f"
-
-[[tasks]]
-name = "redhat-et/crate-preserve-detailedquery-in-collect-on-prune"
-digest = "sha256:de1e50356c2e19b2ce293a6ccf4db4b70d971bc000168b94f175272a0c98688a"
-
-[[tasks]]
-name = "redhat-et/crate-return-0-instead-of-null"
-digest = "sha256:fe55630282e12a0866196adb6654b94266a0051786e04f1d6033ee0a1631a309"
-
-[[tasks]]
-name = "redhat-et/django-adminurlfieldwidget-autoescape-15x"
-digest = "sha256:72f4dc7f3443d8edd0a24b4ffa93480b3fe26ad71ea1168fc6b69b0938262639"
-
-[[tasks]]
 name = "redhat-et/django-csrf-security-11x"
 digest = "sha256:cd3caf4a930006289559b6c9b76215a087423038df4e75383bd335ae83b86f9e"
-
-[[tasks]]
-name = "redhat-et/django-cve-2018-7537-18x"
-digest = "sha256:275c275da66c0d9759dfd8cef6036ba12733c7244983bd8d6f04d0c8be5f9b5b"
-
-[[tasks]]
-name = "redhat-et/django-cve-2022-28346-22x"
-digest = "sha256:1da2beae0de89a534191a637b0f572a5cf634c5f347c65d59454c4db6b74c1e9"
 
 [[tasks]]
 name = "redhat-et/django-cve-2022-28346-40x"
@@ -97,6 +49,90 @@ name = "redhat-et/django-duplicate-filenames-upload-15x"
 digest = "sha256:6ceaf42bd614e639d10786c6e6a43358c74d695e48be6afe12547ac1cf3d64cd"
 
 [[tasks]]
+name = "redhat-et/django-cve-2018-7537-18x"
+digest = "sha256:275c275da66c0d9759dfd8cef6036ba12733c7244983bd8d6f04d0c8be5f9b5b"
+
+[[tasks]]
+name = "redhat-et/django-cve-2022-28346-22x"
+digest = "sha256:1da2beae0de89a534191a637b0f572a5cf634c5f347c65d59454c4db6b74c1e9"
+
+[[tasks]]
+name = "redhat-et/django-adminurlfieldwidget-autoescape-15x"
+digest = "sha256:72f4dc7f3443d8edd0a24b4ffa93480b3fe26ad71ea1168fc6b69b0938262639"
+
+[[tasks]]
 name = "redhat-et/django-remoteuser-logout-14x"
 digest = "sha256:428ed3343619a745851a6922aa220756db795a0c1048fd022467871bb5454c32"
+
+[[tasks]]
+name = "redhat-et/crate-account-for-direct-buffers-when-constructing"
+digest = "sha256:bbaebaab85123722981dc52fe6f1cab4cf1aa2ed643cb547cc0180ddfe751e14"
+
+[[tasks]]
+name = "redhat-et/crate-ensure-that-joingraph-adds-only-edges"
+digest = "sha256:f21fadf23d712545357d00ad976e5115fa76f6d938a425eaec37ef8cdb9d6307"
+
+[[tasks]]
+name = "redhat-et/crate-fix-a-race-condition-swallowing-pgwire"
+digest = "sha256:23aa03bde910c510149f429d7b3e64641952c76f5ee8a2b27934d5ab9bad773a"
+
+[[tasks]]
+name = "redhat-et/crate-fix-error-handling-on-insert"
+digest = "sha256:b2bd77fbe53bbf47b7b039041b8279621df680d72a6e317d05b3d7a43893dd23"
+
+[[tasks]]
+name = "redhat-et/crate-fix-memory-based-pause-resume"
+digest = "sha256:da3bcd7ab44515a60769b1ead5b28f53bcdb41c97c93f7ecda004ad050902d5b"
+
+[[tasks]]
+name = "redhat-et/crate-fix-partition-by-cols-not"
+digest = "sha256:4304be28cd16385b805033ce43ab95051a0d7c4a5a47cbfc992dfa39ddb3faa0"
+
+[[tasks]]
+name = "redhat-et/crate-fix-replication-from-translog-for-integral"
+digest = "sha256:8cd6409a848745964f76d63318c48924cf9e93c77ed801db2f3ca9d74d3f2007"
+
+[[tasks]]
+name = "redhat-et/crate-preserve-detailedquery-in-collect-on-prune"
+digest = "sha256:433f0b05cdb2a5aa9148a36fb7f797aaf5e8a9a5b6903e30e24c733a7aa37108"
+
+[[tasks]]
+name = "redhat-et/crate-return-0-instead-of-null"
+digest = "sha256:951561e0654195181127a4778a6f731816d198d27f40bb9bb3e6909cb5843fad"
+
+[[tasks]]
+name = "redhat-et/crio-fix-deadlock-when-the-container-is-release-1-30"
+digest = "sha256:7254436eb89a950d4f56c2c1696c571db6e681e8c777552b73787f00bd4c9724"
+
+[[tasks]]
+name = "redhat-et/crio-fix-deadlock-when-the-container-is-release-1-31"
+digest = "sha256:a93cd940497b42c2aab7820acc81b1a86cf507f408318173c80a08ba2d9687ea"
+
+[[tasks]]
+name = "redhat-et/crio-hack-build-rpms-sh-update-release-1-29"
+digest = "sha256:c7da54f09e7565e18ece046696a9bbb93bb9f8b8ee57142cb7f0ce472f22cdbf"
+
+[[tasks]]
+name = "redhat-et/crio-highperformancehooks-fix-irq-smp-affinity-race-release-1-31"
+digest = "sha256:dfbbbdcbf6e28508fe74b9c948b650c500a6a607315873edd11a78cffd1540f5"
+
+[[tasks]]
+name = "redhat-et/crio-ocpbugs-62150-server-ignore-etc-passwd-release-1-31"
+digest = "sha256:256338ad11acde6f68fb211420f879f85a01a44870b19765e373abe00044fdb2"
+
+[[tasks]]
+name = "redhat-et/crio-runtimehandlerhooks-save-whether-irq-balance-enable-release-1-31"
+digest = "sha256:7696faa74a86524a072deb379f42d153e20ff7f620b45713ae92a882b7354be2"
+
+[[tasks]]
+name = "redhat-et/crio-runtimehandlerhooks-save-whether-irq-balance-enable-release-1-32"
+digest = "sha256:606d89c5a2838184589cf34443dd0b7aa91c7edd1e4fc5db0c86c8c873e87174"
+
+[[tasks]]
+name = "redhat-et/crio-server-run-post-stop-hooks-before-release-1-31"
+digest = "sha256:a1a9a6eb6b7029cc74c1086b20c8d772eeab84134dab86cbc744224644296f7c"
+
+[[tasks]]
+name = "redhat-et/crio-server-run-post-stop-hooks-before-release-1-32"
+digest = "sha256:7fc869edaca976e050a9421de2121d26bcf9428e5e3dbbaf03f9c907090c7fad"
 

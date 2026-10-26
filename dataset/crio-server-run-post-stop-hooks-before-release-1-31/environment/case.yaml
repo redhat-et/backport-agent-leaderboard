@@ -1,0 +1,42 @@
+issue_id: "crio-server-run-post-stop-hooks-before-release-1-31"
+bug_description: >
+  Backport the fix "server: run post stop hooks before updating container status" (commit 8f893226, branch 'source') onto branch
+  'target' (release-1.31) so that the project builds and its complete test
+  suite passes.
+
+repository:
+  source_path: /workspace/crio
+  workdir: /workspace/workdir
+
+branches:
+  source: source
+  target: target
+
+fix:
+  commit: "8f893226bc9a69930498dffbb2665cb46ac7245f"
+
+build:
+  # FULL-tree build (every package except the bats/e2e test dirs), in vendor
+  # mode: hermetic, and consistent with the era Makefile's BUILDTAGS.
+  command: >-
+    GOTOOLCHAIN=local go build -mod=vendor
+    -tags "containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper seccomp"
+    $(GOTOOLCHAIN=local go list -mod=vendor
+    -tags "containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper seccomp"
+    ./... | grep -v /test | grep -v nsmgr/test)
+  # FULL unit-test suite (short mode) across all packages.
+  test_command: >-
+    GOTOOLCHAIN=local go test -mod=vendor -short -count=1
+    -tags "test containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper seccomp"
+    $(GOTOOLCHAIN=local go list -mod=vendor
+    -tags "test containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper seccomp"
+    ./... | grep -v /test | grep -v nsmgr/test)
+
+model: "openai/your-model-here"
+api_base: "https://your-endpoint.com/v1"
+
+advanced:
+  context_length: 262144
+  command_timeout: 3600
+  max_build_test_retries: 10
+  max_resolution_retries: 5

@@ -1,0 +1,224 @@
+From ab2bd453eacc459e08d40661b59de55950cb103b Mon Sep 17 00:00:00 2001
+From: Ayato Tokubi <atokubi@redhat.com>
+Date: Fri, 13 Jun 2025 04:24:32 +0000
+Subject: [PATCH 1/2] fix deadlock when the container is in uninterruptible
+ sleep
+
+Signed-off-by: Ayato Tokubi <atokubi@redhat.com>
+(cherry picked from commit 1e751b490b2f8eb48cc39efa9eca2c0ffcd9ac0c)
+---
+ internal/oci/container.go   | 85 +++++++++++++++++++++++--------------
+ internal/oci/runtime_oci.go |  3 ++
+ 2 files changed, 56 insertions(+), 32 deletions(-)
+
+diff --git a/internal/oci/container.go b/internal/oci/container.go
+index beca05fc5..dbe41f391 100644
+--- a/internal/oci/container.go
++++ b/internal/oci/container.go
+@@ -50,24 +50,28 @@ type Container struct {
+ 	stopSignal string
+ 	// If set, _some_ name of the image imageID; it may have NO RELATIONSHIP to the users’ requested image name.
+ 	imageName             *references.RegistryImageReference
+-	imageID               *storage.StorageImageID // nil for infra containers.
+-	mountPoint            string
+-	seccompProfilePath    string
+-	conmonCgroupfsPath    string
+-	crioAnnotations       fields.Set
+-	state                 *ContainerState
+-	opLock                sync.RWMutex
+-	spec                  *specs.Spec
+-	idMappings            *idtools.IDMappings
+-	terminal              bool
+-	stdin                 bool
+-	stdinOnce             bool
+-	created               bool
+-	spoofed               bool
+-	stopping              bool
+-	stopLock              sync.Mutex
++	imageID            *storage.StorageImageID // nil for infra containers.
++	mountPoint         string
++	seccompProfilePath string
++	conmonCgroupfsPath string
++	crioAnnotations    fields.Set
++	state              *ContainerState
++	opLock             sync.RWMutex
++	spec               *specs.Spec
++	idMappings         *idtools.IDMappings
++	terminal           bool
++	stdin              bool
++	stdinOnce          bool
++	created            bool
++	spoofed            bool
++	stopping           bool
++	stopLock           sync.Mutex
++	// stopTimeoutChan is used to update the stop timeout.
++	// After the container goes into the kill loop, the channel must not be used
++	// because it is not controlled by the timeout anymore.
+ 	stopTimeoutChan       chan int64
+ 	stopWatchers          []chan struct{}
++	stopKillLoopBegun     bool
+ 	pidns                 nsmgr.Namespace
+ 	restore               bool
+ 	restoreArchivePath    string
+@@ -154,22 +158,23 @@ func NewContainer(id, name, bundlePath, logPath string, labels, crioAnnotations,
+ 			ImageRef: externalImageRef,
+ 			ImageId:  imageIDString,
+ 		},
+-		name:            name,
+-		bundlePath:      bundlePath,
+-		logPath:         logPath,
+-		terminal:        terminal,
+-		stdin:           stdin,
+-		stdinOnce:       stdinOnce,
+-		runtimeHandler:  runtimeHandler,
+-		crioAnnotations: crioAnnotations,
++		name:              name,
++		bundlePath:         bundlePath,
++		logPath:            logPath,
++		terminal:           terminal,
++		stdin:              stdin,
++		stdinOnce:          stdinOnce,
++		runtimeHandler:     runtimeHandler,
++		crioAnnotations:    crioAnnotations,
+ 		imageName:       imageName,
+-		imageID:         imageID,
+-		dir:             dir,
+-		state:           state,
+-		stopSignal:      stopSignal,
+-		stopTimeoutChan: make(chan int64, 10),
+-		stopWatchers:    []chan struct{}{},
+-		execPIDs:        map[int]bool{},
++		imageID:            imageID,
++		dir:               dir,
++		state:             state,
++		stopSignal:         stopSignal,
++		stopTimeoutChan:    make(chan int64, 10),
++		stopWatchers:       []chan struct{}{},
++		stopKillLoopBegun:  false,
++		execPIDs:           map[int]bool{},
+ 	}
+ 	return c, nil
+ }
+@@ -609,6 +614,13 @@ func (c *Container) SetAsStopping() (setToStopping bool) {
+ 	return false
+ }
+ 
++// SetStopKillLoopBegun sets the stopKillLoopBegun flag to true.
++func (c *Container) SetStopKillLoopBegun() {
++	c.stopLock.Lock()
++	defer c.stopLock.Unlock()
++	c.stopKillLoopBegun = true
++}
++
+ func (c *Container) WaitOnStopTimeout(ctx context.Context, timeout int64) {
+ 	c.stopLock.Lock()
+ 	if !c.stopping {
+@@ -616,7 +628,16 @@ func (c *Container) WaitOnStopTimeout(ctx context.Context, timeout int64) {
+ 		return
+ 	}
+ 
+-	c.stopTimeoutChan <- timeout
++	// Don't use the stopTimeoutChan when the container is in kill loop
++	// because values in the channel are no longer consumed.
++	if !c.stopKillLoopBegun {
++		// Use select and default not to block when the stopTimeoutChan is full.
++		// The channel is very unlikely to be full, but it could happen in theory.
++		select {
++		case c.stopTimeoutChan <- timeout:
++		default:
++		}
++	}
+ 
+ 	watcher := make(chan struct{}, 1)
+ 	c.stopWatchers = append(c.stopWatchers, watcher)
+diff --git a/internal/oci/runtime_oci.go b/internal/oci/runtime_oci.go
+index 33c4edc3b..9f0169659 100644
+--- a/internal/oci/runtime_oci.go
++++ b/internal/oci/runtime_oci.go
+@@ -946,6 +946,7 @@ func (r *runtimeOCI) StopLoopForContainer(c *Container, bm kwait.BackoffManager)
+ 
+ 		case <-time.After(time.Until(targetTime)):
+ 			log.Warnf(ctx, "Stopping container %s with stop signal timed out. Killing...", c.ID())
++			c.SetStopKillLoopBegun()
+ 			goto killContainer
+ 
+ 		case <-done:
+@@ -966,9 +967,11 @@ killContainer:
+ 		}
+ 
+ 		if err := c.Living(); err != nil {
++			log.Debugf(ctx, "Container is no longer alive")
+ 			stop()
+ 			return
+ 		}
++		log.Debugf(ctx, "Killing failed for some reasons, retrying...")
+ 		// Reschedule the timer so that the periodic reminder can continue.
+ 		blockedTimer.Reset(stopProcessBlockedInterval)
+ 	}, bm, true, ctx.Done())
+-- 
+2.39.5
+
+
+From 3a8a10080ad74c135541d8dcf6adbfc23fcd2714 Mon Sep 17 00:00:00 2001
+From: Amalgamator Bench <amalgamator-bench@redhat.com>
+Date: Sun, 18 Oct 2026 03:23:29 +0000
+Subject: [PATCH 2/2] fixup: adapt backport to target branch API
+
+Co-authored-by: amalgamator <amalgamator@redhat.com>
+---
+ internal/oci/container.go | 30 +++++++++++++++---------------
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/internal/oci/container.go b/internal/oci/container.go
+index dbe41f391..3503de71c 100644
+--- a/internal/oci/container.go
++++ b/internal/oci/container.go
+@@ -49,7 +49,7 @@ type Container struct {
+ 	dir        string
+ 	stopSignal string
+ 	// If set, _some_ name of the image imageID; it may have NO RELATIONSHIP to the users’ requested image name.
+-	imageName             *references.RegistryImageReference
++	imageName          *references.RegistryImageReference
+ 	imageID            *storage.StorageImageID // nil for infra containers.
+ 	mountPoint         string
+ 	seccompProfilePath string
+@@ -159,22 +159,22 @@ func NewContainer(id, name, bundlePath, logPath string, labels, crioAnnotations,
+ 			ImageId:  imageIDString,
+ 		},
+ 		name:              name,
+-		bundlePath:         bundlePath,
+-		logPath:            logPath,
+-		terminal:           terminal,
+-		stdin:              stdin,
+-		stdinOnce:          stdinOnce,
+-		runtimeHandler:     runtimeHandler,
+-		crioAnnotations:    crioAnnotations,
+-		imageName:       imageName,
+-		imageID:            imageID,
++		bundlePath:        bundlePath,
++		logPath:           logPath,
++		terminal:          terminal,
++		stdin:             stdin,
++		stdinOnce:         stdinOnce,
++		runtimeHandler:    runtimeHandler,
++		crioAnnotations:   crioAnnotations,
++		imageName:         imageName,
++		imageID:           imageID,
+ 		dir:               dir,
+ 		state:             state,
+-		stopSignal:         stopSignal,
+-		stopTimeoutChan:    make(chan int64, 10),
+-		stopWatchers:       []chan struct{}{},
+-		stopKillLoopBegun:  false,
+-		execPIDs:           map[int]bool{},
++		stopSignal:        stopSignal,
++		stopTimeoutChan:   make(chan int64, 10),
++		stopWatchers:      []chan struct{}{},
++		stopKillLoopBegun: false,
++		execPIDs:          map[int]bool{},
+ 	}
+ 	return c, nil
+ }
+-- 
+2.39.5
+

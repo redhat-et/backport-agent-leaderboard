@@ -1,0 +1,799 @@
+diff --git a/internal/runtimehandlerhooks/high_performance_hooks_linux.go b/internal/runtimehandlerhooks/high_performance_hooks_linux.go
+index 9aca130a2..a28a73e90 100644
+--- a/internal/runtimehandlerhooks/high_performance_hooks_linux.go
++++ b/internal/runtimehandlerhooks/high_performance_hooks_linux.go
+@@ -63,9 +63,12 @@ const (
+ 
+ // HighPerformanceHooks used to run additional hooks that will configure a system for the latency sensitive workloads.
+ type HighPerformanceHooks struct {
+-	irqBalanceConfigFile string
+-	cpusetLock           sync.Mutex
+-	sharedCPUs           string
++	irqBalanceConfigFile     string
++	cpusetLock               sync.Mutex
++	irqSMPAffinityFileLock   sync.Mutex
++	irqBalanceConfigFileLock sync.Mutex
++	sharedCPUs               string
++	irqSMPAffinityFile       string
+ }
+ 
+ func (h *HighPerformanceHooks) PreCreate(ctx context.Context, specgen *generate.Generator, s *sandbox.Sandbox, c *oci.Container) error {
+@@ -133,7 +136,8 @@ func (h *HighPerformanceHooks) PreStart(ctx context.Context, c *oci.Container, s
+ 	// disable the IRQ smp load balancing for the container CPUs
+ 	if shouldIRQLoadBalancingBeDisabled(ctx, s.Annotations()) {
+ 		log.Infof(ctx, "Disable irq smp balancing for container %q", c.ID())
+-		if err := setIRQLoadBalancing(ctx, c, false, IrqSmpAffinityProcFile, h.irqBalanceConfigFile); err != nil {
++
++		if err := h.setIRQLoadBalancing(ctx, c, false); err != nil {
+ 			return fmt.Errorf("set IRQ load balancing: %w", err)
+ 		}
+ 	}
+@@ -185,7 +189,7 @@ func (h *HighPerformanceHooks) PreStop(ctx context.Context, c *oci.Container, s
+ 
+ 	// enable the IRQ smp balancing for the container CPUs
+ 	if shouldIRQLoadBalancingBeDisabled(ctx, s.Annotations()) {
+-		if err := setIRQLoadBalancing(ctx, c, true, IrqSmpAffinityProcFile, h.irqBalanceConfigFile); err != nil {
++		if err := h.setIRQLoadBalancing(ctx, c, true); err != nil {
+ 			return fmt.Errorf("set IRQ load balancing: %w", err)
+ 		}
+ 	}
+@@ -537,7 +541,7 @@ func disableCPULoadBalancingV1(containerManagers []cgroups.Manager) error {
+ 	return nil
+ }
+ 
+-func setIRQLoadBalancing(ctx context.Context, c *oci.Container, enable bool, irqSmpAffinityFile, irqBalanceConfigFile string) error {
++func (h *HighPerformanceHooks) setIRQLoadBalancing(ctx context.Context, c *oci.Container, enable bool) error {
+ 	lspec := c.Spec().Linux
+ 	if lspec == nil ||
+ 		lspec.Resources == nil ||
+@@ -546,23 +550,15 @@ func setIRQLoadBalancing(ctx context.Context, c *oci.Container, enable bool, irq
+ 		return fmt.Errorf("find container %s CPUs", c.ID())
+ 	}
+ 
+-	content, err := os.ReadFile(irqSmpAffinityFile)
+-	if err != nil {
+-		return err
+-	}
+-	currentIRQSMPSetting := strings.TrimSpace(string(content))
+-	newIRQSMPSetting, newIRQBalanceSetting, err := UpdateIRQSmpAffinityMask(lspec.Resources.CPU.Cpus, currentIRQSMPSetting, enable)
++	newIRQBalanceSetting, err := h.updateNewIRQSMPAffinityMask(lspec.Resources.CPU.Cpus, enable)
+ 	if err != nil {
+ 		return err
+ 	}
+-	if err := os.WriteFile(irqSmpAffinityFile, []byte(newIRQSMPSetting), 0o644); err != nil {
+-		return err
+-	}
+ 
+-	isIrqConfigExists := fileExists(irqBalanceConfigFile)
++	isIrqConfigExists := fileExists(h.irqBalanceConfigFile)
+ 
+ 	if isIrqConfigExists {
+-		if err := updateIrqBalanceConfigFile(irqBalanceConfigFile, newIRQBalanceSetting); err != nil {
++		if err := h.updateIrqBalanceConfigFile(newIRQBalanceSetting); err != nil {
+ 			return err
+ 		}
+ 	}
+@@ -586,6 +582,36 @@ func setIRQLoadBalancing(ctx context.Context, c *oci.Container, enable bool, irq
+ 	return nil
+ }
+ 
++func (h *HighPerformanceHooks) updateNewIRQSMPAffinityMask(cpus string, enable bool) (string, error) {
++	h.irqSMPAffinityFileLock.Lock()
++	defer h.irqSMPAffinityFileLock.Unlock()
++
++	content, err := os.ReadFile(h.irqSMPAffinityFile)
++	if err != nil {
++		return "", err
++	}
++
++	currentIRQSMPSetting := strings.TrimSpace(string(content))
++
++	newIRQSMPSetting, newIRQBalanceSetting, err := calcIRQSMPAffinityMask(cpus, currentIRQSMPSetting, enable)
++	if err != nil {
++		return "", err
++	}
++
++	if err := os.WriteFile(h.irqSMPAffinityFile, []byte(newIRQSMPSetting), 0o644); err != nil {
++		return "", err
++	}
++
++	return newIRQBalanceSetting, nil
++}
++
++func (h *HighPerformanceHooks) updateIrqBalanceConfigFile(newIRQBalanceSetting string) error {
++	h.irqBalanceConfigFileLock.Lock()
++	defer h.irqBalanceConfigFileLock.Unlock()
++
++	return updateIrqBalanceConfigFile(h.irqBalanceConfigFile, newIRQBalanceSetting)
++}
++
+ func setCPUQuota(podManager cgroups.Manager, containerManagers []cgroups.Manager) error {
+ 	if err := disableCPUQuotaForCgroup(podManager); err != nil {
+ 		return err
+@@ -965,18 +991,6 @@ func RestoreIrqBalanceConfig(ctx context.Context, irqBalanceConfigFile, irqBanne
+ 	return nil
+ }
+ 
+-func ShouldCPUQuotaBeDisabled(ctx context.Context, cid string, cSpec *specs.Spec, s *sandbox.Sandbox, annotations fields.Set) bool {
+-	if !shouldRunHooks(ctx, cid, cSpec, s) {
+-		return false
+-	}
+-	if annotations[crioannotations.CPUQuotaAnnotation] == annotationTrue {
+-		log.Warnf(ctx, "%s", annotationValueDeprecationWarning(crioannotations.CPUQuotaAnnotation))
+-	}
+-
+-	return annotations[crioannotations.CPUQuotaAnnotation] == annotationTrue ||
+-		annotations[crioannotations.CPUQuotaAnnotation] == annotationDisable
+-}
+-
+ func shouldRunHooks(ctx context.Context, id string, cSpec *specs.Spec, s *sandbox.Sandbox) bool {
+ 	if isCgroupParentBurstable(s) {
+ 		log.Infof(ctx, "Container %q is a burstable pod. Skip PreStart.", id)
+diff --git a/internal/runtimehandlerhooks/high_performance_hooks_test.go b/internal/runtimehandlerhooks/high_performance_hooks_test.go
+index 0163b169d..9bcab8b2a 100644
+--- a/internal/runtimehandlerhooks/high_performance_hooks_test.go
++++ b/internal/runtimehandlerhooks/high_performance_hooks_test.go
+@@ -4,7 +4,9 @@ import (
+ 	"context"
+ 	"os"
+ 	"path/filepath"
++	"strconv"
+ 	"strings"
++	"sync"
+ 	"time"
+ 
+ 	. "github.com/onsi/ginkgo/v2"
+@@ -13,10 +15,12 @@ import (
+ 	"github.com/opencontainers/runtime-tools/generate"
+ 	types "k8s.io/cri-api/pkg/apis/runtime/v1"
+ 
++	"github.com/cri-o/cri-o/internal/hostport"
+ 	"github.com/cri-o/cri-o/internal/lib/sandbox"
+ 	"github.com/cri-o/cri-o/internal/log"
+ 	"github.com/cri-o/cri-o/internal/oci"
+ 	crioannotations "github.com/cri-o/cri-o/pkg/annotations"
++	"github.com/cri-o/cri-o/pkg/config"
+ )
+ 
+ const (
+@@ -58,7 +62,11 @@ var _ = Describe("high_performance_hooks", func() {
+ 		irqSmpAffinityFile := filepath.Join(fixturesDir, "irq_smp_affinity")
+ 		irqBalanceConfigFile := filepath.Join(fixturesDir, "irqbalance")
+ 		verifySetIRQLoadBalancing := func(enabled bool, expected string) {
+-			err := setIRQLoadBalancing(context.TODO(), container, enabled, irqSmpAffinityFile, irqBalanceConfigFile)
++			h := &HighPerformanceHooks{
++				irqBalanceConfigFile: irqBalanceConfigFile,
++				irqSMPAffinityFile:   irqSmpAffinityFile,
++			}
++			err := h.setIRQLoadBalancing(context.TODO(), container, enabled)
+ 			Expect(err).ToNot(HaveOccurred())
+ 
+ 			content, err := os.ReadFile(irqSmpAffinityFile)
+@@ -111,7 +119,11 @@ var _ = Describe("high_performance_hooks", func() {
+ 		irqSmpAffinityFile := filepath.Join(fixturesDir, "irq_smp_affinity")
+ 		irqBalanceConfigFile := filepath.Join(fixturesDir, "irqbalance")
+ 		verifySetIRQLoadBalancing := func(enabled bool, expectedSmp, expectedBan string) {
+-			err = setIRQLoadBalancing(context.TODO(), container, enabled, irqSmpAffinityFile, irqBalanceConfigFile)
++			h := &HighPerformanceHooks{
++				irqBalanceConfigFile: irqBalanceConfigFile,
++				irqSMPAffinityFile:   irqSmpAffinityFile,
++			}
++			err = h.setIRQLoadBalancing(context.TODO(), container, enabled)
+ 			Expect(err).ToNot(HaveOccurred())
+ 
+ 			content, err := os.ReadFile(irqSmpAffinityFile)
+@@ -733,4 +745,325 @@ var _ = Describe("high_performance_hooks", func() {
+ 			Expect(env).To(ContainElements("OPENSHIFT_ISOLATED_CPUS=1-2", "OPENSHIFT_SHARED_CPUS=3-4"))
+ 		})
+ 	})
++	Describe("Make sure that correct runtime handler hooks are set", func() {
++		var runtimeName string
++		var sandboxAnnotations map[string]string
++		var sb *sandbox.Sandbox
++		var cfg *config.Config
++		var hooksRetriever *HooksRetriever
++
++		irqSmpAffinityFile := filepath.Join(fixturesDir, "irq_smp_affinity")
++		irqBalanceConfigFile := filepath.Join(fixturesDir, "irqbalance")
++		flags = "0000,0000ffff"
++
++		ctx := context.Background()
++
++		verifySetIRQLoadBalancing := func(expected string) {
++			content, err := os.ReadFile(irqSmpAffinityFile)
++			Expect(err).ToNot(HaveOccurred())
++			Expect(strings.Trim(string(content), "\n")).To(Equal(expected))
++		}
++
++		createContainer := func(cpus string) (*oci.Container, error) {
++			container, err := oci.NewContainer("containerID", "", "", "",
++				make(map[string]string), make(map[string]string),
++				make(map[string]string), "pauseImage", nil, nil, "",
++				&types.ContainerMetadata{}, "sandboxID", false, false,
++				false, "", "", time.Now(), "")
++			if err != nil {
++				return nil, err
++			}
++			var cpuShares uint64 = 1024
++			container.SetSpec(
++				&specs.Spec{
++					Linux: &specs.Linux{
++						Resources: &specs.LinuxResources{
++							CPU: &specs.LinuxCPU{
++								Cpus:   cpus,
++								Shares: &cpuShares,
++							},
++						},
++					},
++				},
++			)
++
++			return container, nil
++		}
++
++		JustBeforeEach(func() {
++			// Simulate a restart of crio each time as we're modifying the config between runs.
++			cpuLoadBalancingAllowedAnywhereOnce = sync.Once{}
++
++			hooksRetriever = NewHooksRetriever(ctx, cfg)
++
++			// create tests affinity file
++			err = os.WriteFile(irqSmpAffinityFile, []byte(flags), 0o644)
++			Expect(err).ToNot(HaveOccurred())
++
++			sbox := sandbox.NewBuilder()
++			createdAt := time.Now()
++			sbox.SetCreatedAt(createdAt)
++			sbox.SetID("sandboxID")
++			sbox.SetName("sandboxName")
++			sbox.SetLogDir("test")
++			sbox.SetShmPath("test")
++			sbox.SetNamespace("")
++			sbox.SetKubeName("")
++			sbox.SetMountLabel("test")
++			sbox.SetProcessLabel("test")
++			sbox.SetCgroupParent("")
++			sbox.SetRuntimeHandler(runtimeName)
++			sbox.SetResolvPath("")
++			sbox.SetHostname("")
++			sbox.SetPortMappings([]*hostport.PortMapping{})
++			sbox.SetHostNetwork(false)
++			sbox.SetUsernsMode("")
++			sbox.SetPodLinuxOverhead(nil)
++			sbox.SetPodLinuxResources(nil)
++			err = sbox.SetCRISandbox(
++				sbox.ID(),
++				map[string]string{},
++				sandboxAnnotations,
++				&types.PodSandboxMetadata{},
++			)
++			Expect(err).ToNot(HaveOccurred())
++			sbox.SetPrivileged(false)
++			sbox.SetHostNetwork(false)
++			sbox.SetCreatedAt(createdAt)
++			sb, err = sbox.GetSandbox()
++			Expect(err).ToNot(HaveOccurred())
++		})
++
++		Context("with runtime name high-performance and sandbox disable annotation", func() {
++			BeforeEach(func() {
++				runtimeName = "high-performance"
++				sandboxAnnotations = map[string]string{crioannotations.IRQLoadBalancingAnnotation: "disable"}
++				cfg = &config.Config{
++					RuntimeConfig: config.RuntimeConfig{
++						IrqBalanceConfigFile: irqBalanceConfigFile,
++						Runtimes: config.Runtimes{
++							"high-performance": {
++								AllowedAnnotations: []string{},
++							},
++							"default": {},
++						},
++					},
++				}
++			})
++
++			It("should set the correct irq bit mask with concurrency", func() {
++				hooks := hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
++				Expect(hooks).NotTo(BeNil())
++				if hph, ok := hooks.(*HighPerformanceHooks); ok {
++					hph.irqSMPAffinityFile = irqSmpAffinityFile
++				}
++				var wg sync.WaitGroup
++				for cpu := range 16 {
++					wg.Add(1)
++					go func() {
++						defer wg.Done()
++						container, err := createContainer(strconv.Itoa(cpu))
++						Expect(err).ToNot(HaveOccurred())
++						err = hooks.PreStart(ctx, container, sb)
++						Expect(err).ToNot(HaveOccurred())
++					}()
++				}
++				wg.Wait()
++				verifySetIRQLoadBalancing("00000000,00000000")
++			})
++		})
++
++		Context("with runtime name high-performance and sandbox without any annotation", func() {
++			BeforeEach(func() {
++				runtimeName = "high-performance"
++				sandboxAnnotations = map[string]string{}
++				cfg = &config.Config{
++					RuntimeConfig: config.RuntimeConfig{
++						IrqBalanceConfigFile: irqBalanceConfigFile,
++						Runtimes: config.Runtimes{
++							"high-performance": {
++								AllowedAnnotations: []string{},
++							},
++							"default": {},
++						},
++					},
++				}
++			})
++
++			It("should keep the current irq bit mask but return a high performance hooks", func() {
++				hooks := hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
++				Expect(hooks).NotTo(BeNil())
++				hph, ok := hooks.(*HighPerformanceHooks)
++				Expect(ok).To(BeTrue())
++				hph.irqSMPAffinityFile = irqSmpAffinityFile
++
++				var wg sync.WaitGroup
++				for cpu := range 16 {
++					wg.Add(1)
++					go func() {
++						defer wg.Done()
++						container, err := createContainer(strconv.Itoa(cpu))
++						Expect(err).ToNot(HaveOccurred())
++						err = hooks.PreStart(ctx, container, sb)
++						Expect(err).ToNot(HaveOccurred())
++					}()
++				}
++				wg.Wait()
++				verifySetIRQLoadBalancing(flags)
++			})
++		})
++
++		Context("with runtime name hp and sandbox disable annotation", func() {
++			BeforeEach(func() {
++				runtimeName = "hp"
++				sandboxAnnotations = map[string]string{crioannotations.IRQLoadBalancingAnnotation: "disable"}
++				cfg = &config.Config{
++					RuntimeConfig: config.RuntimeConfig{
++						IrqBalanceConfigFile: irqBalanceConfigFile,
++						Runtimes: config.Runtimes{
++							"hp": {
++								AllowedAnnotations: []string{
++									crioannotations.IRQLoadBalancingAnnotation,
++								},
++							},
++							"default": {},
++						},
++					},
++				}
++			})
++
++			It("should set the correct irq bit mask with concurrency", func() {
++				hooks := hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
++				Expect(hooks).NotTo(BeNil())
++				if hph, ok := hooks.(*HighPerformanceHooks); ok {
++					hph.irqSMPAffinityFile = irqSmpAffinityFile
++				}
++				var wg sync.WaitGroup
++				for cpu := range 16 {
++					wg.Add(1)
++					go func() {
++						defer wg.Done()
++						container, err := createContainer(strconv.Itoa(cpu))
++						Expect(err).ToNot(HaveOccurred())
++						err = hooks.PreStart(ctx, container, sb)
++						Expect(err).ToNot(HaveOccurred())
++					}()
++				}
++				wg.Wait()
++				verifySetIRQLoadBalancing("00000000,00000000")
++			})
++		})
++
++		Context("with runtime name hp and sandbox without any annotation", func() {
++			BeforeEach(func() {
++				runtimeName = "hp"
++				sandboxAnnotations = map[string]string{}
++				cfg = &config.Config{
++					RuntimeConfig: config.RuntimeConfig{
++						IrqBalanceConfigFile: irqBalanceConfigFile,
++						Runtimes: config.Runtimes{
++							"hp": {
++								AllowedAnnotations: []string{
++									crioannotations.IRQLoadBalancingAnnotation,
++								},
++							},
++							"default": {},
++						},
++					},
++				}
++			})
++
++			It("should return a nil hook", func() {
++				hooks := hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
++				Expect(hooks).To(BeNil())
++			})
++		})
++
++		// The following test case should never happen in the real world. However, it makes sure that the checks
++		// actually look at the runtime name and at the sandbox annotation and if _either_ signals that high performance
++		// hooks should be enabled then enable them.
++		Context("with runtime name default and sandbox disable annotation", func() {
++			BeforeEach(func() {
++				runtimeName = "default"
++				sandboxAnnotations = map[string]string{crioannotations.IRQLoadBalancingAnnotation: "disable"}
++				cfg = &config.Config{
++					RuntimeConfig: config.RuntimeConfig{
++						IrqBalanceConfigFile: irqBalanceConfigFile,
++						Runtimes: config.Runtimes{
++							"default": {},
++						},
++					},
++				}
++			})
++
++			It("should set the correct irq bit mask with concurrency", func() {
++				hooks := hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
++				Expect(hooks).NotTo(BeNil())
++				if hph, ok := hooks.(*HighPerformanceHooks); ok {
++					hph.irqSMPAffinityFile = irqSmpAffinityFile
++				}
++				var wg sync.WaitGroup
++				for cpu := range 16 {
++					wg.Add(1)
++					go func() {
++						defer wg.Done()
++						container, err := createContainer(strconv.Itoa(cpu))
++						Expect(err).ToNot(HaveOccurred())
++						err = hooks.PreStart(ctx, container, sb)
++						Expect(err).ToNot(HaveOccurred())
++					}()
++				}
++				wg.Wait()
++				verifySetIRQLoadBalancing("00000000,00000000")
++			})
++		})
++
++		Context("with runtime name default, CPU balancing annotation present and sandbox without any annotation", func() {
++			BeforeEach(func() {
++				runtimeName = "default"
++				sandboxAnnotations = map[string]string{}
++				cfg = &config.Config{
++					RuntimeConfig: config.RuntimeConfig{
++						IrqBalanceConfigFile: irqBalanceConfigFile,
++						Runtimes: config.Runtimes{
++							"high-performance": {
++								AllowedAnnotations: []string{},
++							},
++							"hp": {
++								AllowedAnnotations: []string{
++									crioannotations.IRQLoadBalancingAnnotation,
++								},
++							},
++							"cpu-balancing-anywhere": {
++								AllowedAnnotations: []string{
++									crioannotations.CPULoadBalancingAnnotation,
++								},
++							},
++							"default": {},
++						},
++					},
++				}
++			})
++
++			It("should yield a DefaultCPULoadBalanceHooks which keeps the old mask", func() {
++				hooks := hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
++				Expect(hooks).NotTo(BeNil())
++				_, ok := (hooks).(*DefaultCPULoadBalanceHooks)
++				Expect(ok).To(BeTrue())
++				var wg sync.WaitGroup
++				for cpu := range 16 {
++					wg.Add(1)
++					go func() {
++						defer wg.Done()
++						container, err := createContainer(strconv.Itoa(cpu))
++						Expect(err).ToNot(HaveOccurred())
++						err = hooks.PreStart(ctx, container, sb)
++						Expect(err).ToNot(HaveOccurred())
++					}()
++				}
++				wg.Wait()
++				verifySetIRQLoadBalancing(flags)
++			})
++		})
++	})
+ })
+diff --git a/internal/runtimehandlerhooks/runtime_handler_hooks.go b/internal/runtimehandlerhooks/runtime_handler_hooks.go
+index 188030590..8a42c1e9c 100644
+--- a/internal/runtimehandlerhooks/runtime_handler_hooks.go
++++ b/internal/runtimehandlerhooks/runtime_handler_hooks.go
+@@ -8,6 +8,7 @@ import (
+ 
+ 	"github.com/cri-o/cri-o/internal/lib/sandbox"
+ 	"github.com/cri-o/cri-o/internal/oci"
++	libconfig "github.com/cri-o/cri-o/pkg/config"
+ )
+ 
+ var (
+@@ -25,3 +26,9 @@ type RuntimeHandlerHooks interface {
+ type HighPerformanceHook interface {
+ 	RuntimeHandlerHooks
+ }
++
++// HooksRetriever allows retrieving the runtime hooks for a given sandbox.
++type HooksRetriever struct {
++	config               *libconfig.Config
++	highPerformanceHooks RuntimeHandlerHooks
++}
+diff --git a/internal/runtimehandlerhooks/runtime_handler_hooks_linux.go b/internal/runtimehandlerhooks/runtime_handler_hooks_linux.go
+index a3aca0f40..ef0067c7c 100644
+--- a/internal/runtimehandlerhooks/runtime_handler_hooks_linux.go
++++ b/internal/runtimehandlerhooks/runtime_handler_hooks_linux.go
+@@ -10,23 +10,57 @@ import (
+ 	libconfig "github.com/cri-o/cri-o/pkg/config"
+ )
+ 
+-// GetRuntimeHandlerHooks returns RuntimeHandlerHooks implementation by the runtime handler name.
+-func GetRuntimeHandlerHooks(ctx context.Context, config *libconfig.Config, handler string, annotations map[string]string) (RuntimeHandlerHooks, error) {
++// NewHooksRetriever returns a pointer to a new retriever.
++// Log a warning if deprecated configuration is detected.
++func NewHooksRetriever(ctx context.Context, config *libconfig.Config) *HooksRetriever {
+ 	ctx, span := log.StartSpan(ctx)
+ 	defer span.End()
+-	if strings.Contains(handler, HighPerformance) {
+-		log.Warnf(ctx, "The usage of the handler %q without adding high-performance feature annotations under allowed_annotations will be deprecated under 1.21", HighPerformance)
+-		return &HighPerformanceHooks{irqBalanceConfigFile: config.IrqBalanceConfigFile, cpusetLock: sync.Mutex{}, sharedCPUs: config.SharedCPUSet}, nil
++
++	rhh := &HooksRetriever{
++		config:               config,
++		highPerformanceHooks: nil,
+ 	}
+-	if highPerformanceAnnotationsSpecified(annotations) {
+-		log.Warnf(ctx, "The usage of the handler %q without adding high-performance feature annotations under allowed_annotations will be deprecated under 1.21", HighPerformance)
+-		return &HighPerformanceHooks{irqBalanceConfigFile: config.IrqBalanceConfigFile, cpusetLock: sync.Mutex{}, sharedCPUs: config.SharedCPUSet}, nil
++
++	for name, runtime := range config.Runtimes {
++		annotationMap := map[string]string{}
++		for _, v := range runtime.AllowedAnnotations {
++			annotationMap[v] = ""
++		}
++
++		if strings.Contains(name, HighPerformance) && !highPerformanceAnnotationsSpecified(annotationMap) {
++			log.Warnf(ctx, "The usage of the handler %q without adding high-performance feature annotations under "+
++				"allowed_annotations is deprecated since 1.21", HighPerformance)
++		}
+ 	}
+-	if cpuLoadBalancingAllowed(config) {
+-		return &DefaultCPULoadBalanceHooks{}, nil
++
++	return rhh
++}
++
++// Get checks runtime name or the sandbox's annotations for allowed high performance annotations. If present, it returns
++// the single instance of highPerformanceHooks.
++// Otherwise, if crio's config allows CPU load balancing anywhere, return a DefaultCPULoadBalanceHooks.
++// Otherwise, return nil.
++func (hr *HooksRetriever) Get(runtimeName string, sandboxAnnotations map[string]string) RuntimeHandlerHooks {
++	if strings.Contains(runtimeName, HighPerformance) || highPerformanceAnnotationsSpecified(sandboxAnnotations) {
++		if hr.highPerformanceHooks == nil {
++			hr.highPerformanceHooks = &HighPerformanceHooks{
++				irqBalanceConfigFile:     hr.config.IrqBalanceConfigFile,
++				cpusetLock:               sync.Mutex{},
++				irqSMPAffinityFileLock:   sync.Mutex{},
++				irqBalanceConfigFileLock: sync.Mutex{},
++				sharedCPUs:               hr.config.SharedCPUSet,
++				irqSMPAffinityFile:       IrqSmpAffinityProcFile,
++			}
++		}
++
++		return hr.highPerformanceHooks
++	}
++
++	if cpuLoadBalancingAllowed(hr.config) {
++		return &DefaultCPULoadBalanceHooks{}
+ 	}
+ 
+-	return nil, nil
++	return nil
+ }
+ 
+ func highPerformanceAnnotationsSpecified(annotations map[string]string) bool {
+diff --git a/internal/runtimehandlerhooks/runtime_handler_hooks_unsupported.go b/internal/runtimehandlerhooks/runtime_handler_hooks_unsupported.go
+index 6cfce587e..d952cf4bc 100644
+--- a/internal/runtimehandlerhooks/runtime_handler_hooks_unsupported.go
++++ b/internal/runtimehandlerhooks/runtime_handler_hooks_unsupported.go
+@@ -14,11 +14,22 @@ const (
+ 	IrqSmpAffinityProcFile = ""
+ )
+ 
+-// GetRuntimeHandlerHooks returns RuntimeHandlerHooks implementation by the runtime handler name
+-func GetRuntimeHandlerHooks(ctx context.Context, config *libconfig.Config, handler string, annotations map[string]string) (RuntimeHandlerHooks, error) {
++// NewHooksRetriever returns a pointer to a new retriever.
++func NewHooksRetriever(ctx context.Context, config *libconfig.Config) *HooksRetriever {
+ 	ctx, span := log.StartSpan(ctx)
+ 	defer span.End()
+-	return &DefaultCPULoadBalanceHooks{}, nil
++
++	rhh := &HooksRetriever{
++		config:               config,
++		highPerformanceHooks: nil,
++	}
++
++	return rhh
++}
++
++// Get always returns DefaultCPULoadBalanceHooks for non-linux architectures.
++func (hr *HooksRetriever) Get(runtimeName string, sandboxAnnotations map[string]string) RuntimeHandlerHooks {
++	return &DefaultCPULoadBalanceHooks{}
+ }
+ 
+ // RestoreIrqBalanceConfig restores irqbalance service with original banned cpu mask settings
+diff --git a/internal/runtimehandlerhooks/utils_linux.go b/internal/runtimehandlerhooks/utils_linux.go
+index beea59985..6a582c22b 100644
+--- a/internal/runtimehandlerhooks/utils_linux.go
++++ b/internal/runtimehandlerhooks/utils_linux.go
+@@ -94,10 +94,10 @@ func isAllBitSet(in []byte) bool {
+ 	return true
+ }
+ 
+-// UpdateIRQSmpAffinityMask take input cpus that need to change irq affinity mask and
++// calcIRQSMPAffinityMask take input cpus that need to change irq affinity mask and
+ // the current mask string, return an update mask string and inverted mask, with those cpus
+ // enabled or disable in the mask.
+-func UpdateIRQSmpAffinityMask(cpus, current string, set bool) (cpuMask, bannedCPUMask string, err error) {
++func calcIRQSMPAffinityMask(cpus, current string, set bool) (cpuMask, bannedCPUMask string, err error) {
+ 	podcpuset, err := cpuset.Parse(cpus)
+ 	if err != nil {
+ 		return cpus, "", err
+diff --git a/internal/runtimehandlerhooks/utils_test.go b/internal/runtimehandlerhooks/utils_test.go
+index 866e4cf3b..97f5fa6a5 100644
+--- a/internal/runtimehandlerhooks/utils_test.go
++++ b/internal/runtimehandlerhooks/utils_test.go
+@@ -27,7 +27,7 @@ var _ = Describe("Utils", func() {
+ 
+ 		DescribeTable("testing cpu mask",
+ 			func(c TestData) {
+-				mask, invMask, err := UpdateIRQSmpAffinityMask(c.input.cpus, c.input.mask, c.input.set)
++				mask, invMask, err := calcIRQSMPAffinityMask(c.input.cpus, c.input.mask, c.input.set)
+ 				Expect(err).ToNot(HaveOccurred())
+ 				Expect(mask).To(Equal(c.expected.mask))
+ 				Expect(invMask).To(Equal(c.expected.invMask))
+diff --git a/server/container_create_linux.go b/server/container_create_linux.go
+index 8db1b90ae..6695c91b1 100644
+--- a/server/container_create_linux.go
++++ b/server/container_create_linux.go
+@@ -36,7 +36,6 @@ import (
+ 	"github.com/cri-o/cri-o/internal/linklogs"
+ 	"github.com/cri-o/cri-o/internal/log"
+ 	oci "github.com/cri-o/cri-o/internal/oci"
+-	"github.com/cri-o/cri-o/internal/runtimehandlerhooks"
+ 	"github.com/cri-o/cri-o/internal/storage"
+ 	"github.com/cri-o/cri-o/internal/storage/references"
+ 	crioann "github.com/cri-o/cri-o/pkg/annotations"
+@@ -945,10 +944,7 @@ func (s *Server) createSandboxContainer(ctx context.Context, ctr ctrfactory.Cont
+ 		makeOCIConfigurationRootless(specgen)
+ 	}
+ 
+-	hooks, err := runtimehandlerhooks.GetRuntimeHandlerHooks(ctx, &s.config, sb.RuntimeHandler(), sb.Annotations())
+-	if err != nil {
+-		return nil, fmt.Errorf("failed to get runtime handler %q hooks", sb.RuntimeHandler())
+-	}
++	hooks := s.hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
+ 
+ 	if err := s.nri.createContainer(ctx, specgen, sb, ociContainer); err != nil {
+ 		return nil, err
+diff --git a/server/container_start.go b/server/container_start.go
+index 0e229dd2a..3e39af548 100644
+--- a/server/container_start.go
++++ b/server/container_start.go
+@@ -12,7 +12,6 @@ import (
+ 	"github.com/cri-o/cri-o/internal/lib"
+ 	"github.com/cri-o/cri-o/internal/log"
+ 	oci "github.com/cri-o/cri-o/internal/oci"
+-	"github.com/cri-o/cri-o/internal/runtimehandlerhooks"
+ )
+ 
+ // StartContainer starts the container.
+@@ -62,10 +61,8 @@ func (s *Server) StartContainer(ctx context.Context, req *types.StartContainerRe
+ 	}
+ 
+ 	sandbox := s.getSandbox(ctx, c.Sandbox())
+-	hooks, err := runtimehandlerhooks.GetRuntimeHandlerHooks(ctx, &s.config, sandbox.RuntimeHandler(), sandbox.Annotations())
+-	if err != nil {
+-		return nil, fmt.Errorf("failed to get runtime handler %q hooks", sandbox.RuntimeHandler())
+-	}
++
++	hooks := s.hooksRetriever.Get(sandbox.RuntimeHandler(), sandbox.Annotations())
+ 
+ 	if err := s.nri.startContainer(ctx, sandbox, c); err != nil {
+ 		log.Warnf(ctx, "NRI start failed for container %q: %v", c.ID(), err)
+diff --git a/server/container_stop.go b/server/container_stop.go
+index af99623f5..55d417680 100644
+--- a/server/container_stop.go
++++ b/server/container_stop.go
+@@ -12,7 +12,6 @@ import (
+ 
+ 	"github.com/cri-o/cri-o/internal/log"
+ 	"github.com/cri-o/cri-o/internal/oci"
+-	"github.com/cri-o/cri-o/internal/runtimehandlerhooks"
+ )
+ 
+ // StopContainer stops a running container with a grace period (i.e., timeout).
+@@ -46,11 +45,7 @@ func (s *Server) stopContainer(ctx context.Context, ctr *oci.Container, timeout
+ 
+ 	sb := s.getSandbox(ctx, ctr.Sandbox())
+ 
+-	hooks, err := runtimehandlerhooks.GetRuntimeHandlerHooks(ctx, &s.config, sb.RuntimeHandler(), sb.Annotations())
+-	if err != nil {
+-		return fmt.Errorf("failed to get runtime handler %q hooks", sb.RuntimeHandler())
+-	}
+-
++	hooks := s.hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations())
+ 	if hooks != nil {
+ 		if err := hooks.PreStop(ctx, ctr, sb); err != nil {
+ 			return fmt.Errorf("failed to run pre-stop hook for container %q: %w", ctr.ID(), err)
+diff --git a/server/sandbox_run_linux.go b/server/sandbox_run_linux.go
+index 148b6b885..5058a1c8a 100644
+--- a/server/sandbox_run_linux.go
++++ b/server/sandbox_run_linux.go
+@@ -33,7 +33,6 @@ import (
+ 	"github.com/cri-o/cri-o/internal/log"
+ 	oci "github.com/cri-o/cri-o/internal/oci"
+ 	"github.com/cri-o/cri-o/internal/resourcestore"
+-	"github.com/cri-o/cri-o/internal/runtimehandlerhooks"
+ 	"github.com/cri-o/cri-o/pkg/annotations"
+ 	libconfig "github.com/cri-o/cri-o/pkg/config"
+ 	"github.com/cri-o/cri-o/utils"
+@@ -998,11 +997,7 @@ func (s *Server) runPodSandbox(ctx context.Context, req *types.RunPodSandboxRequ
+ 		return nil, err
+ 	}
+ 
+-	hooks, err := runtimehandlerhooks.GetRuntimeHandlerHooks(ctx, &s.config, sb.RuntimeHandler(), sb.Annotations())
+-	if err != nil {
+-		return nil, fmt.Errorf("failed to get runtime handler %q hooks", sb.RuntimeHandler())
+-	}
+-	if hooks != nil {
++	if hooks := s.hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations()); hooks != nil {
+ 		if err := hooks.PreStart(ctx, container, sb); err != nil {
+ 			return nil, fmt.Errorf("failed to run pre-stop hook for container %q: %w", sb.ID(), err)
+ 		}
+diff --git a/server/server.go b/server/server.go
+index 4a819b204..549b1f605 100644
+--- a/server/server.go
++++ b/server/server.go
+@@ -92,6 +92,8 @@ type Server struct {
+ 
+ 	// NRI runtime interface
+ 	nri *nriAPI
++	// hooksRetriever allows getting the runtime hooks for the sandboxes.
++	hooksRetriever *runtimehandlerhooks.HooksRetriever
+ }
+ 
+ // pullArguments are used to identify a pullOperation via an input image name and
+@@ -449,7 +451,9 @@ func New(
+ 		minimumMappableGID:       config.MinimumMappableGID,
+ 		pullOperationsInProgress: make(map[pullArguments]*pullOperation),
+ 		resourceStore:            resourcestore.New(),
++		hooksRetriever:           runtimehandlerhooks.NewHooksRetriever(ctx, config),
+ 	}
++
+ 	if s.config.EnablePodEvents {
+ 		// creating a container events channel only if the evented pleg is enabled
+ 		s.ContainerEventsChan = make(chan types.ContainerEventResponse, 1000)
+@@ -829,10 +833,7 @@ func (s *Server) handleExit(ctx context.Context, event fsnotify.Event) {
+ 		}
+ 	}
+ 
+-	hooks, err := runtimehandlerhooks.GetRuntimeHandlerHooks(ctx, &s.config, sb.RuntimeHandler(), sb.Annotations())
+-	if err != nil {
+-		log.Warnf(ctx, "Failed to get runtime handler %q hooks", sb.RuntimeHandler())
+-	} else if hooks != nil {
++	if hooks := s.hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations()); hooks != nil {
+ 		if err := hooks.PostStop(ctx, c, sb); err != nil {
+ 			log.Errorf(ctx, "Failed to run post-stop hook for container %s: %v", c.ID(), err)
+ 		}

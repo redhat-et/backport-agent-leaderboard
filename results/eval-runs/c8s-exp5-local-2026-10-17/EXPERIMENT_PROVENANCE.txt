@@ -1,0 +1,6 @@
+c8s exp5 local experiment — Sat Oct 17 22:27:53 PDT 2026
+base: a4762eb0a29a (local HEAD; redhat-et/main=cd588b8 differs only in
+  docs: AGENTS.md/CLAUDE.md/README.md/SECURITY.md — zero pipeline code)
+fix: uncommitted frozen-baseline diff in EXPERIMENT_FIX.diff
+task: expat-cve-2025-59375-c8s (attempt 5, image c8s-exp5:local)
+model: openai/rits/zai-org/glm-5-3 via EnMaaS

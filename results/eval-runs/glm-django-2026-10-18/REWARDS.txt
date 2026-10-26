@@ -1,0 +1,9 @@
+django-adminurlfieldwidget-autoe__pSbzHUz reward=1
+django-csrf-security-11x__MEBTjgM reward=1
+django-cve-2018-7537-18x__q4eqvxW reward=1
+django-cve-2022-28346-22x__6nzrUSi reward=1
+django-cve-2022-28346-40x__t6WLej2 reward=1
+django-cve-2023-24580-32x__KtAesuA reward=1
+django-duplicate-filenames-uploa__bSbfBHC reward=1
+django-password-reset-fix__q4Gernk reward=1
+django-remoteuser-logout-14x__xmEe7HS reward=1

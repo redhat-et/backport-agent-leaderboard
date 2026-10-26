@@ -1,0 +1,22 @@
+=== GLM DJANGO EVAL START Sun Oct 18 11:35:34 PDT 2026 (local-fix override: /tmp/amalgamator-fix-serve/amalgamator-fix.tar.gz) ===
+  9/9 Mean: 1.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3:50:30 0:00:00
+dataset • amalgamator • rits/zai-org/glm-5-3
+┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
+┃ Trials ┃ Exceptions ┃  Mean ┃
+┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━┩
+│      9 │          0 │ 1.000 │
+└────────┴────────────┴───────┘
+
+┏━━━━━━━━┳━━━━━━━┓
+┃ Reward ┃ Count ┃
+┡━━━━━━━━╇━━━━━━━┩
+│ 1.0    │     9 │
+└────────┴───────┘
+
+Job Info
+Total runtime: 3h 50m 30s
+Results written to jobs/2026-10-18__11-35-34/result.json
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/2026-10-18__11-35-34`
+
+=== GLM DJANGO EVAL DONE rc=0 Sun Oct 18 15:26:08 PDT 2026 ===

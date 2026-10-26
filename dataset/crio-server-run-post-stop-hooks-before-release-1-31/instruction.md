@@ -1,0 +1,1 @@
+Backport the fix "server: run post stop hooks before updating container status" (commit 8f893226, branch 'source') onto branch 'target' (release-1.31) so that the project builds and its complete test suite passes.

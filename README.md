@@ -2,7 +2,7 @@
 
 A benchmark and leaderboard for **automated backporting pipelines**. Real, human-verified
 backports are packaged as [Harbor](https://docs.harborframework.com) tasks; any pipeline —
-[Amalgamator](https://github.com/redhat-et/amalgamator) today, yours next — runs against them
+[Amalgamator](https://github.com/amalgamator-ai/amalgamator) today, yours next — runs against them
 with any LLM endpoint, and is scored by an independent verifier that applies the candidate
 patch to a fresh worktree and runs the project's **full build and complete test suite**.
 
@@ -75,7 +75,7 @@ Full logs: [`results/runs/`](results/runs/).
 
 ## Results so far
 
-**28 of 31 cases scored — 28/28 = 100% pass rate** (3 crate tasks still running).
+**All 31 cases scored — 31/31 = 100% pass rate** (final crate case closed 2026-10-26 via verifier regrade).
 
 | Family | Tasks | Passed | Model |
 |---|---:|---:|---|

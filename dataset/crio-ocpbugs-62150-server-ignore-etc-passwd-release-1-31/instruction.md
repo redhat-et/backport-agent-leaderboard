@@ -1,0 +1,1 @@
+Backport the fix "OCPBUGS-62150: server: ignore /etc/passwd mount" (commit 9d7aa99d, branch 'source') onto branch 'target' (release-1.31) so that the project builds and its complete test suite passes.

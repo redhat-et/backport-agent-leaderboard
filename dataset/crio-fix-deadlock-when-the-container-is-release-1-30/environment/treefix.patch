@@ -1,0 +1,134 @@
+diff --git a/internal/factory/container/namespaces_test.go b/internal/factory/container/namespaces_test.go
+index a087d5689..29bd6cfad 100644
+--- a/internal/factory/container/namespaces_test.go
++++ b/internal/factory/container/namespaces_test.go
+@@ -3,6 +3,7 @@ package container_test
+ import (
+ 	"os"
+ 
++	"github.com/containers/storage/pkg/unshare"
+ 	"github.com/cri-o/cri-o/internal/config/nsmgr"
+ 	nsmgrtest "github.com/cri-o/cri-o/internal/config/nsmgr/test"
+ 	"github.com/cri-o/cri-o/internal/lib/sandbox"
+@@ -165,6 +166,10 @@ var _ = t.Describe("Container:SpecAddNamespaces", func() {
+ 		Expect(found).To(BeTrue())
+ 	})
+ 	It("should use target PID namespace", func() {
++		if unshare.IsRootless() {
++			Skip("need to run as root")
++		}
++
+ 		// Given
+ 		ctrConfig := &types.ContainerConfig{
+ 			Metadata: &types.ContainerMetadata{Name: "name"},
+diff --git a/server/container_create_linux_test.go b/server/container_create_linux_test.go
+index fc0df49e6..d1a4c2e4e 100644
+--- a/server/container_create_linux_test.go
++++ b/server/container_create_linux_test.go
+@@ -5,6 +5,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/cri-o/cri-o/internal/factory/container"
++	"github.com/containers/storage/pkg/mount"
+ 	types "k8s.io/cri-api/pkg/apis/runtime/v1"
+ )
+ 
+@@ -149,10 +150,11 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 	t.Parallel()
+ 
+ 	cases := []struct {
+-		description string
+-		rroSupport  bool
+-		given       *types.Mount
+-		want        string
++		description         string
++		rroSupport          bool
++		given               *types.Mount
++		want                string
++		requiresSharedMount bool
+ 	}{
+ 		{
+ 			"should fail to add an RRO mount without RRO mounts support",
+@@ -165,6 +167,7 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 				Propagation:       0,
+ 			},
+ 			`recursive read-only mount support is not available for hostPath "/mnt"`,
++			false,
+ 		},
+ 		{
+ 			"should fail to add an RRO mount without readonly option",
+@@ -177,6 +180,7 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 				Propagation:       0,
+ 			},
+ 			`recursive read-only mount conflicts with read-write mount for hostPath "/mnt"`,
++			false,
+ 		},
+ 		{
+ 			"should fail to add an RRO mount without private propagation",
+@@ -189,6 +193,7 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 				Propagation:       2,
+ 			},
+ 			`recursive read-only mount requires private propagation for hostPath "/mnt", got: PROPAGATION_BIDIRECTIONAL`,
++			true,
+ 		},
+ 	}
+ 
+@@ -198,6 +203,19 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 		t.Run(tc.description, func(t *testing.T) {
+ 			t.Parallel()
+ 
++			if tc.requiresSharedMount {
++				mountInfos, err := mount.GetMounts()
++				if err != nil {
++					t.Fatalf("Failed to get mount info: %v", err)
++				}
++
++				// Some test environments (e.g. running unit tests inside a container) do not have
++				// shared mounts, so skip in those environments.
++				if err := ensureShared(tc.given.GetHostPath(), mountInfos); err != nil {
++					t.Skipf("skipping: %v", err)
++				}
++			}
++
+ 			ctr, err := container.New()
+ 			if err != nil {
+ 				t.Fatalf("Should create a container, got: %v", err)
+diff --git a/server/container_events_test.go b/server/container_events_test.go
+index 2745466ea..9561b86c1 100644
+--- a/server/container_events_test.go
++++ b/server/container_events_test.go
+@@ -1,6 +1,7 @@
+ package server_test
+ 
+ import (
++	"sync"
+ 	"time"
+ 
+ 	containereventservermock "github.com/cri-o/cri-o/test/mocks/containereventserver"
+@@ -66,8 +67,11 @@ var _ = t.Describe("ContainerEvents", func() {
+ 				Expect(err).ToNot(HaveOccurred())
+ 			}
+ 
+-			go recv(client1)
+-			go recv(client2)
++			var wg sync.WaitGroup
++			wg.Add(2)
++
++			go func() { defer wg.Done(); recv(client1) }()
++			go func() { defer wg.Done(); recv(client2) }()
+ 
+ 			// wait so that both goroutines are ready
+ 			// when we send the events
+@@ -76,6 +80,12 @@ var _ = t.Describe("ContainerEvents", func() {
+ 			for _, event := range events {
+ 				sut.ContainerEventsChan <- event
+ 			}
++
++			// wait for both goroutines to finish processing all events
++			// before AfterEach runs; ContainerEventsChan is buffered so sends
++			// above are non-blocking, and without this the mock Finish() check
++			// races against the broadcaster goroutine.
++			wg.Wait()
+ 		})
+ 	})
+ })

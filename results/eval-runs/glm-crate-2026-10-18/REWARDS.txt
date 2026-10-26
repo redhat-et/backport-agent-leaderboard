@@ -1,0 +1,8 @@
+crate-account-for-direct-buffers__XvMoqXZ reward=1
+crate-ensure-that-joingraph-adds__xDATskM reward=1
+crate-fix-a-race-condition-swall__q5HXeSo reward=1
+crate-fix-error-handling-on-inse__eCFwiUs reward=1
+crate-fix-memory-based-pause-res__9upsDih reward=1
+crate-fix-partition-by-cols-not__W2Xm6NB reward=1
+crate-preserve-detailedquery-in__86AqrwT reward=1
+crate-return-0-instead-of-null__9sdP9kY reward=1

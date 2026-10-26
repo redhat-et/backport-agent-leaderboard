@@ -1,0 +1,170 @@
+From 0dd187ee61eca8d550f457920ed2ec6e916749e1 Mon Sep 17 00:00:00 2001
+From: Amalgamator Bench <amalgamator-bench@redhat.com>
+Date: Mon, 19 Oct 2026 14:40:59 +0000
+Subject: [PATCH 1/2] Port test files for crate-fix-partition-by-cols-not
+ (Phase 0.5c)
+
+Ported before fix to enable RED/GREEN checking
+---
+ .../analyze/SelectWindowFunctionAnalyzerTest.java      | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java b/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java
+index ad6a85dda..9051eab80 100644
+--- a/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java
++++ b/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java
+@@ -209,4 +209,14 @@ public class SelectWindowFunctionAnalyzerTest extends CrateDummyClusterServiceUn
+             .isExactlyInstanceOf(IllegalArgumentException.class)
+             .hasMessageStartingWith("'x' must appear in the GROUP BY clause or be used in an aggregation function.");
+     }
++
++    @Test
++    public void test_window_function_partition_symbols_not_in_grouping_raises_an_error() {
++        assertThatThrownBy(() -> e.analyze(
++            "select sum(x) over(partition by x, y) " +
++                "FROM unnest([1], [6]) as t (x, y) " +
++                "group by x"))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessageStartingWith("'y' must appear in the GROUP BY clause or be used in an aggregation function.");
++    }
+ }
+-- 
+2.53.0
+
+
+From a7af45a2d08155a3eb1c3c473eb351311ebad7b7 Mon Sep 17 00:00:00 2001
+From: Marios Trivyzas <matriv@gmail.com>
+Date: Tue, 26 Aug 2025 19:30:50 +0300
+Subject: [PATCH 2/2] Port main commit (crate-fix-partition-by-cols-not)
+
+[ Conflict summary: Reverted 1 files to target version (files_to_skip) ]
+---
+ docs/appendices/release-notes/5.10.12.rst     |  8 ++
+ docs/appendices/release-notes/6.0.1.rst       | 81 +++++++++++++++++++
+ .../symbol/GroupAndAggregateSemantics.java    |  6 ++
+ 3 files changed, 95 insertions(+)
+ create mode 100644 docs/appendices/release-notes/6.0.1.rst
+
+diff --git a/docs/appendices/release-notes/5.10.12.rst b/docs/appendices/release-notes/5.10.12.rst
+index c18e6b505..78d1480a1 100644
+--- a/docs/appendices/release-notes/5.10.12.rst
++++ b/docs/appendices/release-notes/5.10.12.rst
+@@ -68,3 +68,11 @@ Fixes
+ 
+ - Fixed an issue that could lead to an ``OutOfMemoryError`` when running a
+   query with aggregations under memory pressure in a multi-node cluster.
++
++- Improved error message when attempting to use a column in ``PARTITION BY``
++  clause of a :ref:`window function <window-functions>`, which is not also
++  included in the ``GROUP BY``, e.g.::
++
++    SELECT sum(x) OVER(PARTITION BY x, y)
++    FROM unnest([1], [6]) AS t (x, y)
++    GROUP BY x
+diff --git a/docs/appendices/release-notes/6.0.1.rst b/docs/appendices/release-notes/6.0.1.rst
+new file mode 100644
+index 000000000..1f37ff73e
+--- /dev/null
++++ b/docs/appendices/release-notes/6.0.1.rst
+@@ -0,0 +1,81 @@
++.. _version_6.0.1:
++
++==========================
++Version 6.0.1 - Unreleased
++==========================
++
++
++.. comment 1. Remove the " - Unreleased" from the header above and adjust the ==
++.. comment 2. Remove the NOTE below and replace with: "Released on 20XX-XX-XX."
++.. comment    (without a NOTE entry, simply starting from col 1 of the line)
++.. NOTE::
++
++    In development. 6.0.1 isn't released yet. These are the release notes for
++    the upcoming release.
++
++.. NOTE::
++
++    If you are upgrading a cluster, you must be running CrateDB 5.0.0 or higher
++    before you upgrade to 6.0.1.
++
++    We recommend that you upgrade to the latest 5.10 release before moving to
++    6.0.1.
++
++    A rolling upgrade from >= 5.10.1 to 6.0.1 is supported.
++    Before upgrading, you should `back up your data`_.
++
++.. WARNING::
++
++    Tables that were created before CrateDB 5.x will not function with 6.x
++    and must be recreated before moving to 6.x.x.
++
++    You can recreate tables using ``COPY TO`` and ``COPY FROM`` or by
++    `inserting the data into a new table`_.
++
++.. _back up your data: https://crate.io/docs/crate/reference/en/latest/admin/snapshots.html
++.. _inserting the data into a new table: https://crate.io/docs/crate/reference/en/latest/admin/system-information.html#tables-need-to-be-recreated
++
++.. rubric:: Table of contents
++
++.. contents::
++   :local:
++
++
++See the :ref:`version_6.0.0` release notes for a full list of changes in the 6.0
++series.
++
++Fixes
++=====
++
++- Fixed an issue that led to replication errors due to the ``seqNo`` and
++  ``primaryTerm`` information missing when replicating new records written as
++  part of ``INSERT INTO`` or ``COPY FROM`` statements from the primary to
++  replica shards when running in a mixed cluster with 6.0.0 and an earlier
++  version before 5.10.11.
++
++- Fixed an issue that could lead to a ``NullPointerException`` when running
++  ``DELETE`` queries.
++
++- Fixed an issue that could cause ``SELECT`` statements to get stuck if executed
++  via a PostgreSQL client that set the ``maxRow`` option as part of an
++  ``EXECUTE`` message and it matched the number of result rows exactly.
++
++- Fixed a regression introduced in 6.0.0 that could cause ``INSERT INTO``
++  statements to get stuck during a network partition.
++
++- Fixed intermittent subscription loss in logical replication during rolling
++  upgrades.
++
++- Fixed an issue that prevented users to change the value of the
++  :ref:`indices.recovery.max_concurrent_file_chunks` setting.
++
++- Fixed an issue that could lead to an ``OutOfMemoryError`` when running a
++  query with aggregations under memory pressure in a multi-node cluster.
++
++- Improved error message when attempting to use a column in ``PARTITION BY``
++  clause of a :ref:`window function <window-functions>`, which is not also
++  included in the ``GROUP BY``, e.g.::
++
++    SELECT sum(x) OVER(PARTITION BY x, y)
++    FROM unnest([1], [6]) AS t (x, y)
++    GROUP BY x
+diff --git a/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java b/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
+index 5424e6f31..13a0ab275 100644
+--- a/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
++++ b/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
+@@ -231,6 +231,12 @@ public final class GroupAndAggregateSemantics {
+                     return offender;
+                 }
+             }
++            for (Symbol partition : function.windowDefinition().partitions()) {
++                Symbol offender = partition.accept(this, groupBy);
++                if (offender != null) {
++                    return offender;
++                }
++            }
+             return null;
+         }
+ 
+-- 
+2.53.0
+

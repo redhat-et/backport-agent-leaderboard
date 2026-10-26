@@ -1,4 +1,10 @@
-FROM eclipse-temurin:25-jdk
+# Pin to linux/amd64 on every host: the crate-copy-azure module's OpenDAL
+# native library ships x86-64 only, so an arm64 host (Apple Silicon docker)
+# dies in AzureCopyIntegrationTest with an UnsatisfiedLinkError/NPE. arm64
+# machines run the image under Rosetta emulation -- probe-validated
+# 2026-10-17: image builds in 7m31s cold, AzureCopyIntegrationTest passes
+# 2/2 in 18.2s, whole emulated mvn invocation 54s warm.
+FROM --platform=linux/amd64 eclipse-temurin:25-jdk
 
 WORKDIR /workspace
 

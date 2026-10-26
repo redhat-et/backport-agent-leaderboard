@@ -1,0 +1,282 @@
+diff --git a/internal/lib/sandbox/builder.go b/internal/lib/sandbox/builder.go
+new file mode 100644
+index 000000000..8caca2e43
+--- /dev/null
++++ b/internal/lib/sandbox/builder.go
+@@ -0,0 +1,153 @@
++package sandbox
++
++import (
++	"errors"
++	"time"
++
++	types "k8s.io/cri-api/pkg/apis/runtime/v1"
++
++	"github.com/cri-o/cri-o/internal/hostport"
++)
++
++// Builder provides the sandbox builder API that newer cri-o releases
++// (internal/lib/sandbox/builder.go, upstream commit 4409a15f6676) use in
++// their unit tests. This branch predates that refactor, so the builder is
++// provided here as a thin layer on top of New() to keep unit tests written
++// against the newer API compiling and passing.
++type Builder struct {
++	createdAt         time.Time
++	id                string
++	namespace         string
++	name              string
++	kubeName          string
++	logDir            string
++	processLabel      string
++	mountLabel        string
++	shmPath           string
++	cgroupParent      string
++	runtimeHandler    string
++	resolvPath        string
++	hostname          string
++	portMappings      []*hostport.PortMapping
++	hostNetwork       bool
++	usernsMode        string
++	privileged        bool
++	podLinuxOverhead  *types.LinuxContainerResources
++	podLinuxResources *types.LinuxContainerResources
++	labels            map[string]string
++	annotations       map[string]string
++	metadata          *types.PodSandboxMetadata
++}
++
++// NewBuilder creates a new, empty sandbox builder.
++func NewBuilder() *Builder {
++	return &Builder{}
++}
++
++// ID returns the ID set on the builder.
++func (b *Builder) ID() string {
++	return b.id
++}
++
++func (b *Builder) SetCreatedAt(createdAt time.Time) {
++	b.createdAt = createdAt
++}
++
++func (b *Builder) SetID(id string) {
++	b.id = id
++}
++
++func (b *Builder) SetNamespace(namespace string) {
++	b.namespace = namespace
++}
++
++func (b *Builder) SetName(name string) {
++	b.name = name
++}
++
++func (b *Builder) SetKubeName(kubeName string) {
++	b.kubeName = kubeName
++}
++
++func (b *Builder) SetLogDir(logDir string) {
++	b.logDir = logDir
++}
++
++func (b *Builder) SetProcessLabel(processLabel string) {
++	b.processLabel = processLabel
++}
++
++func (b *Builder) SetMountLabel(mountLabel string) {
++	b.mountLabel = mountLabel
++}
++
++func (b *Builder) SetShmPath(shmPath string) {
++	b.shmPath = shmPath
++}
++
++func (b *Builder) SetCgroupParent(cgroupParent string) {
++	b.cgroupParent = cgroupParent
++}
++
++func (b *Builder) SetRuntimeHandler(runtimeHandler string) {
++	b.runtimeHandler = runtimeHandler
++}
++
++func (b *Builder) SetResolvPath(resolvPath string) {
++	b.resolvPath = resolvPath
++}
++
++func (b *Builder) SetHostname(hostname string) {
++	b.hostname = hostname
++}
++
++func (b *Builder) SetPortMappings(portMappings []*hostport.PortMapping) {
++	b.portMappings = portMappings
++}
++
++func (b *Builder) SetHostNetwork(hostNetwork bool) {
++	b.hostNetwork = hostNetwork
++}
++
++func (b *Builder) SetUsernsMode(usernsMode string) {
++	b.usernsMode = usernsMode
++}
++
++func (b *Builder) SetPrivileged(privileged bool) {
++	b.privileged = privileged
++}
++
++func (b *Builder) SetPodLinuxOverhead(podLinuxOverhead *types.LinuxContainerResources) {
++	b.podLinuxOverhead = podLinuxOverhead
++}
++
++func (b *Builder) SetPodLinuxResources(podLinuxResources *types.LinuxContainerResources) {
++	b.podLinuxResources = podLinuxResources
++}
++
++// SetCRISandbox sets the CRI identity of the sandbox. An ID previously set
++// with SetID takes precedence over the id argument.
++func (b *Builder) SetCRISandbox(id string, labels, annotations map[string]string, metadata *types.PodSandboxMetadata) error {
++	if b.createdAt.IsZero() {
++		return errors.New("createdAt time is Zero")
++	}
++	if b.id == "" {
++		b.id = id
++	}
++	b.labels = labels
++	b.annotations = annotations
++	b.metadata = metadata
++	return nil
++}
++
++// GetSandbox returns the sandbox built from the current builder state.
++func (b *Builder) GetSandbox() (*Sandbox, error) {
++	if b.id == "" {
++		return nil, errors.New("cri-o sandbox not initialized")
++	}
++	return New(b.id, b.namespace, b.name, b.kubeName, b.logDir,
++		b.labels, b.annotations, b.processLabel, b.mountLabel, b.metadata,
++		b.shmPath, b.cgroupParent, b.privileged, b.runtimeHandler,
++		b.resolvPath, b.hostname, b.portMappings, b.hostNetwork,
++		b.createdAt, b.usernsMode, b.podLinuxOverhead, b.podLinuxResources)
++}
+diff --git a/server/container_create_linux_test.go b/server/container_create_linux_test.go
+index 6dd382591..ad2dbe745 100644
+--- a/server/container_create_linux_test.go
++++ b/server/container_create_linux_test.go
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"testing"
+ 
++	"github.com/containers/storage/pkg/mount"
+ 	types "k8s.io/cri-api/pkg/apis/runtime/v1"
+ 
+ 	"github.com/cri-o/cri-o/internal/factory/container"
+@@ -153,10 +154,11 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 	t.Parallel()
+ 
+ 	cases := []struct {
+-		description string
+-		rroSupport  bool
+-		given       *types.Mount
+-		want        string
++		description         string
++		rroSupport          bool
++		given               *types.Mount
++		want                string
++		requiresSharedMount bool
+ 	}{
+ 		{
+ 			"should fail to add an RRO mount without RRO mounts support",
+@@ -169,6 +171,7 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 				Propagation:       0,
+ 			},
+ 			`recursive read-only mount support is not available for hostPath "/mnt"`,
++			false,
+ 		},
+ 		{
+ 			"should fail to add an RRO mount without readonly option",
+@@ -181,6 +184,7 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 				Propagation:       0,
+ 			},
+ 			`recursive read-only mount conflicts with read-write mount for hostPath "/mnt"`,
++			false,
+ 		},
+ 		{
+ 			"should fail to add an RRO mount without private propagation",
+@@ -193,6 +197,7 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 				Propagation:       2,
+ 			},
+ 			`recursive read-only mount requires private propagation for hostPath "/mnt", got: PROPAGATION_BIDIRECTIONAL`,
++			true,
+ 		},
+ 	}
+ 
+@@ -202,6 +207,19 @@ func TestAddOCIBindsRROMountsError(t *testing.T) {
+ 		t.Run(tc.description, func(t *testing.T) {
+ 			t.Parallel()
+ 
++			if tc.requiresSharedMount {
++				mountInfos, err := mount.GetMounts()
++				if err != nil {
++					t.Fatalf("Failed to get mount info: %v", err)
++				}
++
++				// Some test environments (e.g. running unit tests inside a container) do not have
++				// shared mounts, so skip in those environments.
++				if err := ensureShared(tc.given.GetHostPath(), mountInfos); err != nil {
++					t.Skipf("skipping: %v", err)
++				}
++			}
++
+ 			ctr, err := container.New()
+ 			if err != nil {
+ 				t.Fatalf("Should create a container, got: %v", err)
+diff --git a/server/container_events_test.go b/server/container_events_test.go
+index 756842529..d263f586a 100644
+--- a/server/container_events_test.go
++++ b/server/container_events_test.go
+@@ -1,6 +1,7 @@
+ package server_test
+ 
+ import (
++	"sync"
+ 	"time"
+ 
+ 	. "github.com/onsi/ginkgo/v2"
+@@ -67,8 +68,11 @@ var _ = t.Describe("ContainerEvents", func() {
+ 				Expect(err).ToNot(HaveOccurred())
+ 			}
+ 
+-			go recv(client1)
+-			go recv(client2)
++			var wg sync.WaitGroup
++			wg.Add(2)
++
++			go func() { defer wg.Done(); recv(client1) }()
++			go func() { defer wg.Done(); recv(client2) }()
+ 
+ 			// wait so that both goroutines are ready
+ 			// when we send the events
+@@ -77,6 +81,12 @@ var _ = t.Describe("ContainerEvents", func() {
+ 			for _, event := range events {
+ 				sut.ContainerEventsChan <- event
+ 			}
++
++			// wait for both goroutines to finish processing all events
++			// before AfterEach runs; ContainerEventsChan is buffered so sends
++			// above are non-blocking, and without this the mock Finish() check
++			// races against the broadcaster goroutine.
++			wg.Wait()
+ 		})
+ 	})
+ })
+diff --git a/server/sandbox_stop_test.go b/server/sandbox_stop_test.go
+index 08ccd4e10..06e25fc75 100644
+--- a/server/sandbox_stop_test.go
++++ b/server/sandbox_stop_test.go
+@@ -3,7 +3,6 @@ package server_test
+ import (
+ 	"context"
+ 
+-	"github.com/golang/mock/gomock"
+ 	. "github.com/onsi/ginkgo/v2"
+ 	. "github.com/onsi/gomega"
+ 	types "k8s.io/cri-api/pkg/apis/runtime/v1"

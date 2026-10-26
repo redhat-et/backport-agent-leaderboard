@@ -1,0 +1,151 @@
+From 4b1b7b1422d7d628505eccb07c1a43becda3f758 Mon Sep 17 00:00:00 2001
+From: Amalgamator Bench <amalgamator-bench@redhat.com>
+Date: Sun, 18 Oct 2026 00:21:39 +0000
+Subject: [PATCH 1/2] Port test files for
+ crio-server-run-post-stop-hooks-before-release-1-31 (Phase 0.5c)
+
+Ported before fix to enable RED/GREEN checking
+---
+ server/container_remove_test.go | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/server/container_remove_test.go b/server/container_remove_test.go
+index 10a88f57a..f84e4482e 100644
+--- a/server/container_remove_test.go
++++ b/server/container_remove_test.go
+@@ -31,8 +31,6 @@ var _ = t.Describe("ContainerRemove", func() {
+ 				State: specs.State{Status: oci.ContainerStateStopped},
+ 			})
+ 			gomock.InOrder(
+-				runtimeServerMock.EXPECT().StopContainer(gomock.Any(), gomock.Any()).
+-					Return(nil),
+ 				runtimeServerMock.EXPECT().DeleteContainer(gomock.Any(), gomock.Any()).
+ 					Return(nil),
+ 			)
+-- 
+2.39.5
+
+
+From 225e37697749c91cc330affcd6cb541001192921 Mon Sep 17 00:00:00 2001
+From: Peter Hunt <pehunt@redhat.com>
+Date: Mon, 25 Aug 2025 13:34:24 -0400
+Subject: [PATCH 2/2] server: run post stop hooks before updating container
+ status
+
+ContainerStateToDisk will call UpdateContainerStatus which will
+update the internal representation of the container state to be
+stopped. While correct, it opens a race where the kubelet may take action
+on a container that seems stopped before post stop hooks are run.
+
+Signed-off-by: Peter Hunt <pehunt@redhat.com>
+(cherry picked from commit 8f893226bc9a69930498dffbb2665cb46ac7245f)
+---
+ server/container_remove.go |  5 -----
+ server/container_stop.go   | 23 +++++++++++++++--------
+ server/server.go           | 17 +----------------
+ 3 files changed, 16 insertions(+), 29 deletions(-)
+
+diff --git a/server/container_remove.go b/server/container_remove.go
+index 4dbf664ce..6a5d2a2bd 100644
+--- a/server/container_remove.go
++++ b/server/container_remove.go
+@@ -73,11 +73,6 @@ func (s *Server) removeContainerInPod(ctx context.Context, sb *sandbox.Sandbox,
+ 
+ 	c.CleanupConmonCgroup(ctx)
+ 
+-	if err := s.StorageRuntimeServer().StopContainer(ctx, c.ID()); err != nil && !errors.Is(err, storage.ErrContainerUnknown) {
+-		// assume container already umounted
+-		log.Warnf(ctx, "Failed to stop container %s in pod sandbox %s: %v", c.Name(), sb.ID(), err)
+-	}
+-
+ 	if err := s.StorageRuntimeServer().DeleteContainer(ctx, c.ID()); err != nil && !errors.Is(err, storage.ErrContainerUnknown) {
+ 		return fmt.Errorf("failed to delete container %s in pod sandbox %s: %w", c.Name(), sb.ID(), err)
+ 	}
+diff --git a/server/container_stop.go b/server/container_stop.go
+index 55d417680..a14b68e38 100644
+--- a/server/container_stop.go
++++ b/server/container_stop.go
+@@ -10,8 +10,10 @@ import (
+ 	"google.golang.org/grpc/status"
+ 	types "k8s.io/cri-api/pkg/apis/runtime/v1"
+ 
++	"github.com/cri-o/cri-o/internal/lib/sandbox"
+ 	"github.com/cri-o/cri-o/internal/log"
+ 	"github.com/cri-o/cri-o/internal/oci"
++	"github.com/cri-o/cri-o/internal/runtimehandlerhooks"
+ )
+ 
+ // StopContainer stops a running container with a grace period (i.e., timeout).
+@@ -56,12 +58,14 @@ func (s *Server) stopContainer(ctx context.Context, ctr *oci.Container, timeout
+ 		return fmt.Errorf("failed to stop container %s: %w", ctr.ID(), err)
+ 	}
+ 
+-	if err := s.StorageRuntimeServer().StopContainer(ctx, ctr.ID()); err != nil {
+-		return fmt.Errorf("failed to unmount container %s: %w", ctr.ID(), err)
+-	}
++	s.postStopCleanup(ctx, ctr, sb, hooks)
+ 
+-	if err := s.ContainerStateToDisk(ctx, ctr); err != nil {
+-		log.Warnf(ctx, "Unable to write containers %s state to disk: %v", ctr.ID(), err)
++	return nil
++}
++
++func (s *Server) postStopCleanup(ctx context.Context, ctr *oci.Container, sb *sandbox.Sandbox, hooks runtimehandlerhooks.RuntimeHandlerHooks) {
++	if err := s.StorageRuntimeServer().StopContainer(ctx, ctr.ID()); err != nil {
++		log.Errorf(ctx, "Failed to unmount container %s: %v", ctr.ID(), err)
+ 	}
+ 
+ 	if hooks != nil {
+@@ -72,8 +76,11 @@ func (s *Server) stopContainer(ctx context.Context, ctr *oci.Container, timeout
+ 	}
+ 
+ 	if err := s.nri.stopContainer(ctx, sb, ctr); err != nil {
+-		return err
++		log.Warnf(ctx, "NRI stop container request of %s failed: %v", ctr.ID(), err)
++	}
++	// persist container state at the end, so there's no window where CRI-O reports the container
++	// as stopped, but hasn't run post stop hooks.
++	if err := s.ContainerStateToDisk(ctx, ctr); err != nil {
++		log.Warnf(ctx, "Unable to write containers %s state to disk: %v", ctr.ID(), err)
+ 	}
+-
+-	return nil
+ }
+diff --git a/server/server.go b/server/server.go
+index 549b1f605..112231f9c 100644
+--- a/server/server.go
++++ b/server/server.go
+@@ -802,7 +802,6 @@ func (s *Server) handleExit(ctx context.Context, event fsnotify.Event) {
+ 	containerID := filepath.Base(event.Name)
+ 	log.Debugf(ctx, "Container or sandbox exited: %v", containerID)
+ 	c := s.GetContainer(ctx, containerID)
+-	nriCtr := c
+ 	resource := "container"
+ 	var sb *sandbox.Sandbox
+ 	if c == nil {
+@@ -823,21 +822,7 @@ func (s *Server) handleExit(ctx context.Context, event fsnotify.Event) {
+ 	}
+ 	log.Debugf(ctx, "%s exited and found: %v", resource, containerID)
+ 
+-	if err := s.ContainerStateToDisk(ctx, c); err != nil {
+-		log.Warnf(ctx, "Unable to write %s %s state to disk: %v", resource, c.ID(), err)
+-	}
+-
+-	if nriCtr != nil {
+-		if err := s.nri.stopContainer(ctx, nil, nriCtr); err != nil {
+-			log.Warnf(ctx, "NRI stop container request of %s failed: %v", nriCtr.ID(), err)
+-		}
+-	}
+-
+-	if hooks := s.hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations()); hooks != nil {
+-		if err := hooks.PostStop(ctx, c, sb); err != nil {
+-			log.Errorf(ctx, "Failed to run post-stop hook for container %s: %v", c.ID(), err)
+-		}
+-	}
++	s.postStopCleanup(ctx, c, sb, s.hooksRetriever.Get(sb.RuntimeHandler(), sb.Annotations()))
+ 
+ 	s.generateCRIEvent(ctx, c, types.ContainerEventType_CONTAINER_STOPPED_EVENT)
+ 	if err := os.Remove(event.Name); err != nil {
+-- 
+2.39.5
+

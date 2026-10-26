@@ -1,0 +1,80 @@
+From afe0f3f371956d2b934eb2f0caee8e8ac456fae3 Mon Sep 17 00:00:00 2001
+From: Amalgamator Bench <amalgamator-bench@redhat.com>
+Date: Sun, 18 Oct 2026 20:08:42 +0000
+Subject: [PATCH 1/2] Port test files for
+ django-adminurlfieldwidget-autoescape-15x (Phase 0.5c)
+
+Ported before fix to enable RED/GREEN checking
+---
+ tests/regressiontests/admin_widgets/tests.py | 20 +++++++++++++-------
+ 1 file changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/tests/regressiontests/admin_widgets/tests.py b/tests/regressiontests/admin_widgets/tests.py
+index fa599c618..b3fff1fec 100644
+--- a/tests/regressiontests/admin_widgets/tests.py
++++ b/tests/regressiontests/admin_widgets/tests.py
+@@ -299,18 +299,24 @@ class AdminURLWidgetTest(DjangoTestCase):
+         w = widgets.AdminURLFieldWidget()
+         self.assertHTMLEqual(
+             conditional_escape(w.render('test', 'http://example-äüö.com')),
+-            '<p class="url">Currently:<a href="http://xn--example--7za4pnc.com">http://example-äüö.com</a><br />Change:<input class="vURLField" name="test" type="text" value="http://example-äüö.com" /></p>'
++            '<p class="url">Currently: <a href="http://xn--example--7za4pnc.com">http://example-äüö.com</a><br />Change:<input class="vURLField" name="test" type="text" value="http://example-äüö.com" /></p>'
+         )
+ 
+     def test_render_quoting(self):
++        # WARNING: Don't use assertHTMLEqual in that testcase!
++        # assertHTMLEqual will get rid of some escapes which are tested here!
+         w = widgets.AdminURLFieldWidget()
+-        self.assertHTMLEqual(
+-            conditional_escape(w.render('test', 'http://example.com/<sometag>some text</sometag>')),
+-            '<p class="url">Currently:<a href="http://example.com/%3Csometag%3Esome%20text%3C/sometag%3E">http://example.com/&lt;sometag&gt;some text&lt;/sometag&gt;</a><br />Change:<input class="vURLField" name="test" type="text" value="http://example.com/<sometag>some text</sometag>" /></p>'
++        self.assertEqual(
++            w.render('test', 'http://example.com/<sometag>some text</sometag>'),
++            '<p class="url">Currently: <a href="http://example.com/%3Csometag%3Esome%20text%3C/sometag%3E">http://example.com/&lt;sometag&gt;some text&lt;/sometag&gt;</a><br />Change: <input class="vURLField" name="test" type="text" value="http://example.com/&lt;sometag&gt;some text&lt;/sometag&gt;" /></p>'
+         )
+-        self.assertHTMLEqual(
+-            conditional_escape(w.render('test', 'http://example-äüö.com/<sometag>some text</sometag>')),
+-            '<p class="url">Currently:<a href="http://xn--example--7za4pnc.com/%3Csometag%3Esome%20text%3C/sometag%3E">http://example-äüö.com/&lt;sometag&gt;some text&lt;/sometag&gt;</a><br />Change:<input class="vURLField" name="test" type="text" value="http://example-äüö.com/<sometag>some text</sometag>" /></p>'
++        self.assertEqual(
++            w.render('test', 'http://example-äüö.com/<sometag>some text</sometag>'),
++            '<p class="url">Currently: <a href="http://xn--example--7za4pnc.com/%3Csometag%3Esome%20text%3C/sometag%3E">http://example-äüö.com/&lt;sometag&gt;some text&lt;/sometag&gt;</a><br />Change: <input class="vURLField" name="test" type="text" value="http://example-äüö.com/&lt;sometag&gt;some text&lt;/sometag&gt;" /></p>'
++        )
++        self.assertEqual(
++            w.render('test', 'http://www.example.com/%C3%A4"><script>alert("XSS!")</script>"'),
++            '<p class="url">Currently: <a href="http://www.example.com/%C3%A4%22%3E%3Cscript%3Ealert(%22XSS!%22)%3C/script%3E%22">http://www.example.com/%C3%A4&quot;&gt;&lt;script&gt;alert(&quot;XSS!&quot;)&lt;/script&gt;&quot;</a><br />Change: <input class="vURLField" name="test" type="text" value="http://www.example.com/%C3%A4&quot;&gt;&lt;script&gt;alert(&quot;XSS!&quot;)&lt;/script&gt;&quot;" /></p>'
+         )
+ 
+ 
+-- 
+2.43.0
+
+
+From 5e4f90b46e7a63a602dfe71d101dabc89fa179c8 Mon Sep 17 00:00:00 2001
+From: Amalgamator Bench <amalgamator-bench@redhat.com>
+Date: Sun, 18 Oct 2026 20:20:06 +0000
+Subject: [PATCH 2/2] fixup: adapt backport to target branch API
+
+Co-authored-by: amalgamator <amalgamator@redhat.com>
+---
+ django/contrib/admin/widgets.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/django/contrib/admin/widgets.py b/django/contrib/admin/widgets.py
+index 1e6277fb8..1635ea008 100644
+--- a/django/contrib/admin/widgets.py
++++ b/django/contrib/admin/widgets.py
+@@ -310,9 +310,9 @@ class AdminURLFieldWidget(forms.TextInput):
+         html = super(AdminURLFieldWidget, self).render(name, value, attrs)
+         if value:
+             value = force_text(self._format_value(value))
+-            final_attrs = {'href': mark_safe(smart_urlquote(value))}
++            final_attrs = {'href': smart_urlquote(value)}
+             html = format_html(
+-                '<p class="url">{0} <a {1}>{2}</a><br />{3} {4}</p>',
++                '<p class="url">{0} <a{1}>{2}</a><br />{3} {4}</p>',
+                 _('Currently:'), flatatt(final_attrs), value,
+                 _('Change:'), html
+             )
+-- 
+2.43.0
+

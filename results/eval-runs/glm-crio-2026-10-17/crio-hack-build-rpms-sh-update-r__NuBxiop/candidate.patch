@@ -1,0 +1,90 @@
+From 655f85b88c0d21fa277d12d8763779dedaae23da Mon Sep 17 00:00:00 2001
+From: Amalgamator Bench <amalgamator-bench@redhat.com>
+Date: Sun, 18 Oct 2026 02:42:48 +0000
+Subject: [PATCH 1/2] Port test files for
+ crio-hack-build-rpms-sh-update-release-1-29 (Phase 0.5c)
+
+Ported before fix to enable RED/GREEN checking
+---
+ contrib/test/ci/cri-o.spec | 10 ----------
+ 1 file changed, 10 deletions(-)
+
+diff --git a/contrib/test/ci/cri-o.spec b/contrib/test/ci/cri-o.spec
+index f900c321c..bd672870a 100644
+--- a/contrib/test/ci/cri-o.spec
++++ b/contrib/test/ci/cri-o.spec
+@@ -11,13 +11,7 @@
+ %global debug_package %{nil}
+ %endif
+ 
+-%if ! 0%{?centos} && 0%{?rhel}
+-# Golang minor version
+-%global gominver 19
+-%define gobuild(o:) scl enable go-toolset-1.%{gominver} -- go build -buildmode pie -compiler gc -tags="rpm_crashtraceback no_openssl ${BUILDTAGS:-}" -ldflags "${LDFLAGS:-} -B 0x$(head -c20 /dev/urandom|od -An -tx1|tr -d ' \\n') -extldflags '%__global_ldflags'" -a -v -x %{?**};
+-%else
+ %define gobuild(o:) go build -buildmode pie -compiler gc -tags="rpm_crashtraceback no_openssl ${BUILDTAGS:-}" -ldflags "${LDFLAGS:-} -B 0x$(head -c20 /dev/urandom|od -An -tx1|tr -d ' \\n') -extldflags '%__global_ldflags'" -a -v -x %{?**};
+-%endif
+ 
+ %global provider github
+ %global provider_tld com
+@@ -38,12 +32,8 @@ Summary: Kubernetes Container Runtime Interface for OCI-based containers
+ License: ASL 2.0
+ URL: %{git0}
+ Source0: %{name}-test.tar.gz
+-%if ! 0%{?centos} && 0%{?rhel}
+-BuildRequires: go-toolset-1.%{gominver}
+-%else
+ # Assume pre-installed golang (which is the case in our CI)
+ BuildRequires: make
+-%endif
+ BuildRequires: git
+ BuildRequires: glib2-devel
+ BuildRequires: glibc-static
+-- 
+2.39.5
+
+
+From 0e33a9b2dae9adc0dcdb27cde9300423ba4fcf9a Mon Sep 17 00:00:00 2001
+From: Peter Hunt <pehunt@redhat.com>
+Date: Tue, 30 Apr 2024 13:04:42 -0400
+Subject: [PATCH 2/2] hack/build-rpms.sh: Update for new builder image
+
+drop some centos/rhel specific code and fix for the current image
+
+Signed-off-by: Peter Hunt <pehunt@redhat.com>
+(cherry picked from commit 8d3a11eef066a0708d86e8bf793cf6151ee62032)
+---
+ hack/build-rpms.sh | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/hack/build-rpms.sh b/hack/build-rpms.sh
+index 58cf9c73d..d43f87044 100755
+--- a/hack/build-rpms.sh
++++ b/hack/build-rpms.sh
+@@ -35,11 +35,9 @@ if [ -w /etc/yum.conf ] && ! grep -q '^ip_resolve' /etc/yum.conf; then
+ 	os::log::info "Disabling IPv6 for yum ..."
+ 	echo 'ip_resolve=4' >> /etc/yum.conf
+ fi
+-# The default configuration for source repos is to use vault.centos.org
+-# (no mirrors provided), which is super slow as of late, resulting in
+-# timeouts. Workaround: use mirrors.kernel.org instead.
+-sed -i 's|//vault.centos.org/centos/|//archive.kernel.org/centos-vault/centos/|g' /etc/yum.repos.d/CentOS-Sources.repo
+-yum-builddep -y "${OS_RPM_SPECFILE}"
++# Just in case builddep isn't an installed plugin
++dnf -y install 'dnf-command(builddep)'
++dnf builddep -y "${OS_RPM_SPECFILE}" || true
+ 
+ rpmbuild -ba "${OS_RPM_SPECFILE}" \
+     --define "_sourcedir ${rpm_tmp_dir}/SOURCES" \
+@@ -50,7 +48,7 @@ rpmbuild -ba "${OS_RPM_SPECFILE}" \
+     --define "version ${OS_RPM_VERSION}" \
+     --define "release ${OS_RPM_RELEASE}" \
+     --define "commit ${OS_GIT_COMMIT}" \
+-    --define 'dist .el7'
++    --define 'debug_package %{nil}'
+ 
+ # migrate the rpm artifacts to the output directory, must be clean or move will fail
+ make clean
+-- 
+2.39.5
+

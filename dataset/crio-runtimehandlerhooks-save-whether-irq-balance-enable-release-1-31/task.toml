@@ -1,0 +1,28 @@
+schema_version = "1.3"
+artifacts = ["/workspace/workdir", "/workspace/amalgamator/runs", "/workspace/case.yaml"]
+
+[task]
+name = "redhat-et/crio-runtimehandlerhooks-save-whether-irq-balance-enable-release-1-31"
+authors = [{ name = "Surya Prakash Pathak", email = "supathak@redhat.com" }]
+
+[metadata]
+difficulty = "medium"
+difficulty_explanation = """
+Medium cri-o/cri-o backport (similarity=0.78; file_overlap=0.67; size_ratio=0.85; orig_files=3; back_files=3).
+Original fix f7250596 (on release-1.34) -> human backport 16864a7b on release-1.31.
+Target = 469b85ce, the pre-backport tip of release-1.31. Golden = the real human
+backport diff. Era toolchain golang:1.22-bookworm (from the target pin's go.mod, go
+1.22). Verification = full-tree `go build` (vendor mode) + full
+`go test -short -count=1` suite. Target tree carries committed test-environment guards (treefix.patch: rro gomock shim events) so the full suite is deterministic in-container; test-infra only, ports of upstream commits.
+"""
+category = "programming"
+
+[verifier]
+timeout_sec = 18000.0
+
+[agent]
+timeout_sec = 18000.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 3600.0

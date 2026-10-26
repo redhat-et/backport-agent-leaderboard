@@ -1,0 +1,4 @@
+reward 1 (see REWARDS.txt). candidate.patch was not captured by the artifact sync
+for this trial (known harbor compose-cp gap); the patched worktree's .git pointed
+at a container path and could not be recovered. The verifier scored the patch
+in-container at run time.

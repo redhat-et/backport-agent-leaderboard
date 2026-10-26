@@ -1,17 +1,17 @@
 # Results & leaderboard
 
-Completed runs are curated here: each `runs/<timestamp>/` directory is a full harbor job
-output — result, verifier logs, and the complete agent artifacts (every model call, the
-candidate patch, the phase tracker). Fresh runs land in `jobs/` (gitignored) and get copied
-in when curated.
+Completed runs are curated here. `runs/<timestamp>/` directories are full harbor job
+outputs — result, verifier logs, and the complete agent artifacts (every model call, the
+candidate patch, the phase tracker). `eval-runs/` and `regrades/` are trimmed archives:
+each trial keeps exactly two files, `candidate.patch` (the pipeline's answer, as scored)
+and `run.log` (the full pipeline log). Fresh runs land in `jobs/` (gitignored) and get
+copied in when curated.
 
 ## Leaderboard
 
 | Pipeline | Model (endpoint) | Attempted | Passed | Pass rate |
 |---|---|---:|---:|---:|
-| Amalgamator | GLM 5.3 (`openai/rits/zai-org/glm-5-3` via EnMaaS) | 28 / 31 | 28 | 100% (28 scored) |
-
-_3 tasks still running (crate ×2 in flight, ×1 verifier timeout — pending rerun)._
+| Amalgamator | GLM 5.3 (`openai/rits/zai-org/glm-5-3` via EnMaaS) | 31 / 31 | 31 | 100% |
 
 ### expat ×3 (CVE-2025-59375) — 3/3 ✅
 
@@ -47,7 +47,7 @@ _3 tasks still running (crate ×2 in flight, ×1 verifier timeout — pending re
 | `django-password-reset-fix` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
 | `django-remoteuser-logout-14x` | **1.0** | `eval-runs/glm-django-2026-10-18/` |
 
-### crate ×9 — 6/9 (3 pending) 🔄
+### crate ×9 — 9/9 ✅
 
 | Task | Reward | Run log |
 |---|---|---|
@@ -57,9 +57,9 @@ _3 tasks still running (crate ×2 in flight, ×1 verifier timeout — pending re
 | `crate-fix-partition-by-cols-not` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
 | `crate-preserve-detailedquery-in` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
 | `crate-return-0-instead-of-null` | **1.0** | `eval-runs/glm-crate-2026-10-18/` |
-| `crate-fix-replication-from-trans` | ⏳ verifier timeout — rerun needed | — |
-| `crate-fix-memory-based-pause-res` | 🔄 running | — |
-| `crate-fix-a-race-condition-swall` | 🔄 running | — |
+| `crate-fix-a-race-condition-swall` | **1.0** | `eval-runs/glm-crate-2026-10-18/` (see NOTE.txt — patch lost to artifact-sync gap) |
+| `crate-fix-memory-based-pause-res` | **1.0** | `eval-runs/glm-crate-2026-10-18/` (see NOTE.txt — patch lost to artifact-sync gap) |
+| `crate-fix-replication-from-trans` | **1.0** | `regrades/crate-fix-replication-from-trans__regrade3/` (verifier regrade; original run stalled on a host-side Docker issue, not a task defect) |
 
 ## Reading a run directory
 
